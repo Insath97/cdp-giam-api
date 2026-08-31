@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration; use Illuminate\Database\Schema\Blueprint; use Illuminate\Support\Facades\Schema;
+return new class extends Migration { public function up():void{Schema::create('application_user_module',function(Blueprint $t){$t->foreignId('application_id')->constrained('applications')->cascadeOnDelete();$t->foreignId('user_id')->constrained('users')->cascadeOnDelete();$t->foreignId('module_id')->constrained('modules')->cascadeOnDelete();$t->unique(['user_id','application_id','module_id']);$t->index(['application_id','user_id']);});} public function down():void{Schema::dropIfExists('application_user_module');} };
