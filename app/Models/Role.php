@@ -9,12 +9,14 @@ class Role extends SpatieRole
     protected $fillable = [
         'name',
         'guard_name',
-        'application_id',
-        'is_protected',
+        'description',
+        'is_system_reserved',
     ];
 
-    public function application()
+    protected function casts(): array
     {
-        return $this->belongsTo(Application::class);
+        return [
+            'is_system_reserved' => 'boolean',
+        ];
     }
 }

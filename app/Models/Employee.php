@@ -2,30 +2,24 @@
 
 namespace App\Models;
 
+use App\Traits\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends Model
 {
-    use HasFactory;
+    use HasFactory, HasOptimisticLocking, SoftDeletes;
 
     protected $fillable = [
+        'employee_code',
         'f_name',
         'l_name',
         'full_name',
         'name_with_initials',
-        'employee_code',
-        'reporting_manager_id',
-        'province_id',
-        'region_id',
-        'zonal_id',
-        'branch_id',
-        'department_id',
-        'designation_id',
         'employee_type',
         'id_type',
         'id_number',
@@ -43,135 +37,71 @@ class Employee extends Model
         'whatsapp_number',
         'start_date',
         'end_date',
-        'joined_at',
         'is_active',
+        'province_code',
+        'zonal_code',
+        'region_code',
+        'branch_code',
+        'department_code',
+        'designation_code',
+        'reporting_manager_code',
+        'version',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-        'have_whatsapp' => 'boolean',
-        'date_of_birth' => 'date',
-        'start_date' => 'date',
-        'end_date' => 'date',
-        'joined_at' => 'datetime',
-    ];
-
-    /**
-     * Scope a query to only include active employees.
-     */
-    public function scopeActive(Builder $query): Builder
+    protected function casts(): array
     {
-        return $query->where('is_active', true);
+        return [
+            'date_of_birth' => 'date',
+            'start_date' => 'date',
+            'end_date' => 'date',
+            'have_whatsapp' => 'boolean',
+            'is_active' => 'boolean',
+            'version' => 'integer',
+        ];
     }
 
-    /**
-     * Scope a query to search employees by name, email, or employee code.
-     */
-    public function scopeSearch(Builder $query, ?string $search): Builder
-    {
-        if (empty($search)) {
-            return $query;
-        }
-
-        return $query->where(function (Builder $q) use ($search) {
-            $q->where('f_name', 'like', "%{$search}%")
-              ->orWhere('l_name', 'like', "%{$search}%")
-              ->orWhere('full_name', 'like', "%{$search}%")
-              ->orWhere('employee_code', 'like', "%{$search}%")
-              ->orWhere('email', 'like', "%{$search}%");
-        });
-    }
-
-    /**
-     * Get the user account associated with the employee.
-     */
     public function user(): HasOne
     {
-        return $this->hasOne(User::class);
+        return $this->hasOne(User::class, 'employee_code', 'employee_code');
     }
 
-    /**
-     * Get the reporting manager of the employee.
-     */
-    public function reportingManager(): BelongsTo
-    {
-        return $this->belongsTo(Employee::class, 'reporting_manager_id');
-    }
-
-    /**
-     * Get the subordinates reporting to this employee.
-     */
-    public function subordinates(): HasMany
-    {
-        return $this->hasMany(Employee::class, 'reporting_manager_id');
-    }
-
-    /**
-     * Get the province associated with the employee.
-     */
     public function province(): BelongsTo
     {
-        return $this->belongsTo(Province::class);
+        return $this->belongsTo(OrgProvince::class, 'province_code', 'code');
     }
 
-    /**
-     * Get the region associated with the employee.
-     */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(OrgZone::class, 'zonal_code', 'code');
+    }
+
     public function region(): BelongsTo
     {
-        return $this->belongsTo(Region::class);
+        return $this->belongsTo(OrgRegion::class, 'region_code', 'code');
     }
 
-    /**
-     * Get the zonal associated with the employee.
-     */
-    public function zonal(): BelongsTo
-    {
-        return $this->belongsTo(Zonal::class, 'zonal_id');
-    }
-
-    /**
-     * Get the branch where the employee works.
-     */
     public function branch(): BelongsTo
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsTo(OrgBranch::class, 'branch_code', 'code');
     }
 
-    /**
-     * Get the department where the employee works.
-     */
     public function department(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
+        return $this->belongsTo(OrgDepartment::class, 'department_code', 'code');
     }
 
-    /**
-     * Get the designation of the employee.
-     */
     public function designation(): BelongsTo
     {
-        return $this->belongsTo(Designation::class);
+        return $this->belongsTo(OrgDesignation::class, 'designation_code', 'code');
     }
 
-    /**
-     * Get all user IDs associated with subordinate employees (recursive).
-     */
-    public function getAllDescendantUserIds(): array
+    public function reportingManager(): BelongsTo
     {
-        $userIds = [];
-        $subordinates = Employee::where('reporting_manager_id', $this->id)->get();
+        return $this->belongsTo(Employee::class, 'reporting_manager_code', 'employee_code');
+    }
 
-        foreach ($subordinates as $subordinate) {
-            $subUser = User::where('employee_id', $subordinate->id)->first();
-            if ($subUser) {
-                $userIds[] = $subUser->id;
-                $userIds = array_merge($userIds, $subUser->getAllDescendantIds());
-            } else {
-                $userIds = array_merge($userIds, $subordinate->getAllDescendantUserIds());
-            }
-        }
-
-        return $userIds;
+    public function subordinates(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'reporting_manager_code', 'employee_code');
     }
 }
