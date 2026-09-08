@@ -8,6 +8,9 @@ use Illuminate\Validation\Rule;
 
 class StoreEmployeeRequest extends FormRequest
 {
+    /**
+     * Determine if the user is authorized to make this request.
+     */
     public function authorize(): bool
     {
         $createUser = $this->boolean('create_user_account') || $this->boolean('create_user');
@@ -18,6 +21,9 @@ class StoreEmployeeRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Prepare the data for validation.
+     */
     protected function prepareForValidation(): void
     {
         $this->merge([
@@ -34,6 +40,11 @@ class StoreEmployeeRequest extends FormRequest
         ]);
     }
 
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
     public function rules(): array
     {
         $idNumberRules = ['required', 'string', 'max:50'];
@@ -99,6 +110,9 @@ class StoreEmployeeRequest extends FormRequest
         ];
     }
 
+    /**
+     * Configure the validator instance.
+     */
     public function withValidator(\Illuminate\Validation\Validator $validator): void
     {
         $validator->after(function ($validator) {
@@ -153,6 +167,11 @@ class StoreEmployeeRequest extends FormRequest
         });
     }
 
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array<string, string>
+     */
     public function messages(): array
     {
         return [

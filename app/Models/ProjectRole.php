@@ -13,6 +13,11 @@ class ProjectRole extends Model
 
     public $timestamps = false;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'project_id',
         'external_role_id',
@@ -23,6 +28,11 @@ class ProjectRole extends Model
         'last_synced_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -31,11 +41,17 @@ class ProjectRole extends Model
         ];
     }
 
+    /**
+     * Get the project that defines this role.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    /**
+     * Get the user project role pivot records for this role.
+     */
     public function userProjectRoles(): HasMany
     {
         return $this->hasMany(UserProjectRole::class, 'project_role_id');

@@ -28,7 +28,7 @@ class ProjectAccessRequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $actor = $request->user();
-        if (! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('ACCESS_VIEW', 'web')) {
+        if (! $actor || ! $actor->hasPermissionTo('ACCESS_VIEW', 'web')) {
             throw new HttpException(403, 'Forbidden: Insufficient permissions to view access requests.');
         }
 
@@ -66,7 +66,7 @@ class ProjectAccessRequestController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $actor = $request->user();
-        if (! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('ACCESS_VIEW', 'web')) {
+        if (! $actor || ! $actor->hasPermissionTo('ACCESS_VIEW', 'web')) {
             throw new HttpException(403, 'Forbidden: Insufficient permissions to view access requests.');
         }
 
@@ -92,7 +92,7 @@ class ProjectAccessRequestController extends Controller
     public function resolve(Request $request, int $id): JsonResponse
     {
         $actor = $request->user();
-        if (! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
+        if (! $actor || ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
             throw new HttpException(403, 'Forbidden: Insufficient permissions to assign project access.');
         }
 
@@ -203,7 +203,7 @@ class ProjectAccessRequestController extends Controller
     public function reject(Request $request, int $id): JsonResponse
     {
         $actor = $request->user();
-        if (! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
+        if (! $actor || ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
             throw new HttpException(403, 'Forbidden: Insufficient permissions to reject access requests.');
         }
 

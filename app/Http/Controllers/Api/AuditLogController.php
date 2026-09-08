@@ -10,6 +10,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class AuditLogController extends Controller
 {
+    /**
+     * Display a paginated listing of audit logs with optional filtering.
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = AuditLog::with(['actor', 'project'])->orderBy('id', 'desc');
@@ -60,6 +63,9 @@ class AuditLogController extends Controller
         return AuditLogResource::collection($logs);
     }
 
+    /**
+     * Display the specified audit log entry.
+     */
     public function show(int $id): AuditLogResource
     {
         $log = AuditLog::with(['actor', 'project'])->findOrFail($id);

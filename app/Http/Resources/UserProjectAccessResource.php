@@ -11,6 +11,8 @@ class UserProjectAccessResource extends JsonResource
      * Transform the resource into an array.
      * Note: Does NOT expose project base_url or api_base_url.
      * Clearly distinguishes assigned project roles from direct per-user permission overrides.
+     *
+     * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {

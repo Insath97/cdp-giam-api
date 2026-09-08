@@ -7,6 +7,10 @@ use App\Services\Audit\AuditLoggerService;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Service executing downstream project integration health probes, recording
+ * network round-trip latencies and logging status changes.
+ */
 class ProjectHealthCheckService
 {
     public function __construct(
@@ -14,6 +18,12 @@ class ProjectHealthCheckService
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Perform an active HTTP health probe against downstream project endpoint.
+     *
+     * @param Project $project
+     * @return array<string, mixed>
+     */
     public function check(Project $project): array
     {
         $integration = $project->integration;

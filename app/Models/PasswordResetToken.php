@@ -11,6 +11,11 @@ class PasswordResetToken extends Model
 
     protected $table = 'password_reset_tokens';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'user_id',
         'token_hash',
@@ -18,6 +23,11 @@ class PasswordResetToken extends Model
         'created_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -26,6 +36,9 @@ class PasswordResetToken extends Model
         ];
     }
 
+    /**
+     * Get the user for whom this password reset token was issued.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

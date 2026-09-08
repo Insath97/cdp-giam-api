@@ -15,6 +15,9 @@ class ProjectCatalogController extends Controller
         protected CatalogSyncHandler $syncHandler
     ) {}
 
+    /**
+     * Display the RBAC catalog (modules, roles, permissions) for a project.
+     */
     public function show(Request $request, int|string $projectId): ProjectCatalogResource
     {
         $activeOnly = $request->boolean('active_only') || $request->boolean('assignable');
@@ -34,6 +37,9 @@ class ProjectCatalogController extends Controller
         return new ProjectCatalogResource($project);
     }
 
+    /**
+     * Trigger synchronization of the RBAC catalog from the remote project.
+     */
     public function sync(Request $request, int|string $projectId): JsonResponse
     {
         $project = Project::with('integration')

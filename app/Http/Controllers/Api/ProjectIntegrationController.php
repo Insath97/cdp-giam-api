@@ -18,6 +18,9 @@ class ProjectIntegrationController extends Controller
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Display the integration configuration for a project.
+     */
     public function show(int|string $projectId): ProjectIntegrationResource
     {
         $project = Project::where('id', $projectId)
@@ -33,6 +36,9 @@ class ProjectIntegrationController extends Controller
         return new ProjectIntegrationResource($integration);
     }
 
+    /**
+     * Update or create the integration configuration for a project.
+     */
     public function update(UpdateProjectIntegrationRequest $request, int|string $projectId): ProjectIntegrationResource
     {
         $project = Project::where('id', $projectId)
@@ -68,6 +74,9 @@ class ProjectIntegrationController extends Controller
         return new ProjectIntegrationResource($integration->fresh());
     }
 
+    /**
+     * Perform a connectivity and health check for the project integration.
+     */
     public function healthCheck(int|string $projectId): JsonResponse
     {
         $project = Project::with('integration')

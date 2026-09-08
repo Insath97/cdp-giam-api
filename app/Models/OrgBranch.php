@@ -13,6 +13,11 @@ class OrgBranch extends Model
 
     protected $table = 'org_branches';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'region_code',
         'code',
@@ -21,6 +26,11 @@ class OrgBranch extends Model
         'is_active',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -28,11 +38,17 @@ class OrgBranch extends Model
         ];
     }
 
+    /**
+     * Get the parent region for this branch.
+     */
     public function region(): BelongsTo
     {
         return $this->belongsTo(OrgRegion::class, 'region_code', 'code');
     }
 
+    /**
+     * Get the employees assigned to this branch.
+     */
     public function employees(): HasMany
     {
         return $this->hasMany(Employee::class, 'branch_code', 'code');

@@ -13,6 +13,11 @@ class ProjectPermissionGroup extends Model
 
     public $timestamps = false;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'project_id',
         'project_module_id',
@@ -24,6 +29,11 @@ class ProjectPermissionGroup extends Model
         'last_synced_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -32,16 +42,25 @@ class ProjectPermissionGroup extends Model
         ];
     }
 
+    /**
+     * Get the project that defines this permission group.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    /**
+     * Get the module to which this permission group belongs.
+     */
     public function module(): BelongsTo
     {
         return $this->belongsTo(ProjectModule::class, 'project_module_id');
     }
 
+    /**
+     * Get the permissions under this permission group.
+     */
     public function permissions(): HasMany
     {
         return $this->hasMany(ProjectPermission::class, 'project_permission_group_id');

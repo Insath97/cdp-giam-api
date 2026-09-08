@@ -11,6 +11,11 @@ class ProjectIntegration extends Model
 {
     use HasFactory;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'project_id',
         'api_base_url',
@@ -27,11 +32,21 @@ class ProjectIntegration extends Model
         'last_sync_catalog_at',
     ];
 
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var list<string>
+     */
     protected $hidden = [
         'encrypted_client_secret',
         'client_secret',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -44,16 +59,25 @@ class ProjectIntegration extends Model
         ];
     }
 
+    /**
+     * Get the project associated with this integration configuration.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    /**
+     * Encrypt and store the client secret integration credential.
+     */
     public function setClientSecretAttribute(?string $value): void
     {
         $this->attributes['encrypted_client_secret'] = $value ? Crypt::encryptString($value) : null;
     }
 
+    /**
+     * Decrypt and retrieve the plaintext integration credential for outbound requests.
+     */
     public function getDecryptedClientSecret(): ?string
     {
         if (empty($this->encrypted_client_secret)) {

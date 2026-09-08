@@ -38,4 +38,16 @@ return [
         'client_secret' => env('CENTRIX_CLIENT_SECRET'),
     ],
 
+    'hrms' => [
+        'api_url' => env('HRMS_API_BASE_URL'),
+        'client_id' => env('HRMS_CLIENT_ID'),
+        'client_secret' => env('HRMS_CLIENT_SECRET'),
+    ],
+
+    'payroll' => [
+        'api_url' => env('PAYROLL_API_BASE_URL'),
+        'client_id' => env('PAYROLL_CLIENT_ID'),
+        'client_secret' => env('PAYROLL_CLIENT_SECRET'),
+    ],
+
 ];

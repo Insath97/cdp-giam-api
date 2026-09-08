@@ -7,10 +7,18 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Response;
 
+/**
+ * PDF report generation service rendering landscape A4 access reports via DomPDF.
+ */
 class PdfReportGenerator
 {
     /**
      * Generate and download a formatted PDF access report.
+     *
+     * @param Builder $query
+     * @param User|null $actor
+     * @param int $limit
+     * @return Response
      */
     public function generateAccessReportPdf(
         Builder $query,

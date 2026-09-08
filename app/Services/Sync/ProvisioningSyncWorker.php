@@ -10,6 +10,20 @@ use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/**
+ * Asynchronous worker service processing transactional outbox sync jobs,
+ * managing downstream API requests, exponential backoff, and access status promotion.
+ *
+ * SyncJob lifecycle statuses:
+ * - PENDING: Initial state created during local DB transaction alongside UserProjectAccess (PENDING).
+ * - PROCESSING: Atomic claim state set by worker preventing concurrent duplicate execution.
+ * - SUCCESS: Terminal success on downstream HTTP 2xx. Promotes UserProjectAccess to ACTIVE
+ *   (for CREATE_USER and ASSIGN_ACCESS) or REVOKED (for REVOKE_ACCESS).
+ * - RETRYING: Temporary failure with exponential backoff delay (1m, 5m, 15m, 1h).
+ * - FAILED: Terminal failure when attempt_count >= max_attempts (5) or configuration missing.
+ *
+ * NOTE: Statuses 'IN_PROGRESS' and 'COMPLETED' are not part of the SyncJob schema/runtime.
+ */
 class ProvisioningSyncWorker
 {
     public function __construct(
@@ -17,6 +31,14 @@ class ProvisioningSyncWorker
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Process an individual synchronization outbox job.
+     * Transitions status from PENDING/RETRYING to PROCESSING, dispatches downstream HTTP
+     * request with idempotency headers, and updates status to SUCCESS, RETRYING, or FAILED.
+     *
+     * @param SyncJob $syncJob
+     * @return bool True on success, false on failure or already claimed.
+     */
     public function process(SyncJob $syncJob): bool
     {
         $project = $syncJob->project;

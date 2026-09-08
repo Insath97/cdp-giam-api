@@ -9,10 +9,24 @@ use App\Models\User;
 use App\Models\UserProjectAccess;
 use App\Services\Audit\AuditLoggerService;
 use App\Services\Sync\DataProjectionService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service orchestrating OAuth2/OIDC SSO authorization code issuance,
+ * PKCE S256 verification, and downstream token exchange with dual-key rate limiting.
+ *
+ * Authorization codes are persisted in the MySQL `sso_auth_codes` table via the
+ * SsoAuthCode Eloquent model. Only the SHA-256 hash (`code_hash`) is stored;
+ * the raw authorization code is never stored in the database. Codes have a 60-second TTL
+ * and are bound to user_id, project_id, and redirect_uri.
+ *
+ * Single-use redemption is protected by a database transaction with exclusive row-level
+ * locking (`lockForUpdate()`), guaranteeing atomic check-and-consume and eliminating
+ * concurrent double-redemption race conditions.
+ */
 class SsoAuthorizationService
 {
     public function __construct(
@@ -22,6 +36,17 @@ class SsoAuthorizationService
 
     /**
      * Issue a single-use, 60-second authorization code with PKCE S256 challenge.
+     * Persists SHA-256 hash into MySQL `sso_auth_codes` bound to user, project, and redirect_uri.
+     * Raw 64-character code is returned transiently for browser redirection only.
+     *
+     * @param User $user
+     * @param int $projectId
+     * @param string $redirectUri
+     * @param string|null $codeChallenge
+     * @param string|null $codeChallengeMethod
+     * @param string|null $state
+     * @return array<string, mixed>
+     * @throws HttpException
      */
     public function issueAuthorizationCode(
         User $user,
@@ -121,6 +146,17 @@ class SsoAuthorizationService
 
     /**
      * Exchange an authorization code for project-scoped identity and tokens.
+     * Authenticates downstream project client credentials, looks up authorization code
+     * by SHA-256 hash in MySQL `sso_auth_codes`, verifies 60s expiration, validates
+     * PKCE S256 challenge, burns code via `used_at = now()`, and projects user attributes.
+     *
+     * @param string $code
+     * @param string|null $codeVerifier
+     * @param string $clientId
+     * @param string $clientSecret
+     * @param string $clientIp
+     * @return array<string, mixed>
+     * @throws HttpException
      */
     public function exchangeCodeForToken(
         string $code,
@@ -156,63 +192,82 @@ class SsoAuthorizationService
 
         $project = $integration->project;
 
-        // 3. Find authorization code
+        // 3. Atomically check and consume authorization code within a locked transaction
         $codeHash = hash('sha256', $code);
-        $authCode = SsoAuthCode::with(['user.employee'])
-            ->where('code_hash', $codeHash)
-            ->where('project_id', $project->id)
-            ->first();
+        $burnAndReject = null;
 
-        if (! $authCode) {
-            RateLimiter::hit($ipLockoutKey, 900);
-            RateLimiter::hit($clientLockoutKey, 900);
-            throw new HttpException(400, 'Invalid authorization code.');
-        }
+        [$user, $access] = DB::transaction(function () use (
+            $codeHash,
+            $project,
+            $codeVerifier,
+            $ipLockoutKey,
+            $clientLockoutKey,
+            &$burnAndReject
+        ) {
+            // Retrieve matching SsoAuthCode with exclusive row-level lock
+            $authCode = SsoAuthCode::with(['user.employee'])
+                ->where('code_hash', $codeHash)
+                ->where('project_id', $project->id)
+                ->lockForUpdate()
+                ->first();
 
-        // Check single-use
-        if ($authCode->used_at !== null) {
-            RateLimiter::hit($ipLockoutKey, 900);
-            RateLimiter::hit($clientLockoutKey, 900);
-            throw new HttpException(400, 'Authorization code has already been redeemed.');
-        }
-
-        // Check expiry (60s TTL)
-        if ($authCode->expires_at->isPast()) {
-            RateLimiter::hit($ipLockoutKey, 900);
-            RateLimiter::hit($clientLockoutKey, 900);
-            throw new HttpException(400, 'Authorization code has expired.');
-        }
-
-        // 4. PKCE RFC 7636 Verification if code_challenge was provided at authorization time
-        if (! empty($authCode->code_challenge)) {
-            $computedChallenge = rtrim(strtr(base64_encode(hash('sha256', (string) $codeVerifier, true)), '+/', '-_'), '=');
-            if (! hash_equals((string) $authCode->code_challenge, $computedChallenge)) {
+            if (! $authCode) {
                 RateLimiter::hit($ipLockoutKey, 900);
                 RateLimiter::hit($clientLockoutKey, 900);
-                throw new HttpException(400, 'PKCE code_verifier verification failed.');
+                throw new HttpException(400, 'Invalid authorization code.');
             }
-        }
 
-        // 5. Re-validate user_project_access status = ACTIVE at redemption time
-        $access = UserProjectAccess::with(['roles', 'permissions'])
-            ->where('user_id', $authCode->user_id)
-            ->where('project_id', $authCode->project_id)
-            ->first();
+            // Check single-use
+            if ($authCode->used_at !== null) {
+                RateLimiter::hit($ipLockoutKey, 900);
+                RateLimiter::hit($clientLockoutKey, 900);
+                throw new HttpException(400, 'Authorization code has already been redeemed.');
+            }
 
-        if (! $access || $access->status !== 'ACTIVE') {
-            // Burn code immediately to prevent reuse
+            // Check expiry (60s TTL)
+            if ($authCode->expires_at->isPast()) {
+                RateLimiter::hit($ipLockoutKey, 900);
+                RateLimiter::hit($clientLockoutKey, 900);
+                throw new HttpException(400, 'Authorization code has expired.');
+            }
+
+            // 4. PKCE RFC 7636 Verification if code_challenge was provided at authorization time
+            if (! empty($authCode->code_challenge)) {
+                $computedChallenge = rtrim(strtr(base64_encode(hash('sha256', (string) $codeVerifier, true)), '+/', '-_'), '=');
+                if (! hash_equals((string) $authCode->code_challenge, $computedChallenge)) {
+                    RateLimiter::hit($ipLockoutKey, 900);
+                    RateLimiter::hit($clientLockoutKey, 900);
+                    throw new HttpException(400, 'PKCE code_verifier verification failed.');
+                }
+            }
+
+            // 5. Re-validate user_project_access status = ACTIVE at redemption time
+            $access = UserProjectAccess::with(['roles', 'permissions'])
+                ->where('user_id', $authCode->user_id)
+                ->where('project_id', $authCode->project_id)
+                ->first();
+
+            // Mark code used under the exclusive row lock
             $authCode->update(['used_at' => now()]);
-            $status = $access ? $access->status : 'REVOKED';
-            throw new HttpException(403, "Redemption rejected: User access to [{$project->code}] is no longer ACTIVE ({$status}).");
+
+            if (! $access || $access->status !== 'ACTIVE') {
+                $status = $access ? $access->status : 'REVOKED';
+                $burnAndReject = new HttpException(403, "Redemption rejected: User access to [{$project->code}] is no longer ACTIVE ({$status}).");
+
+                return [null, null];
+            }
+
+            return [$authCode->user, $access];
+        });
+
+        if ($burnAndReject !== null) {
+            throw $burnAndReject;
         }
 
-        // Mark code used atomically
-        $authCode->update(['used_at' => now()]);
         RateLimiter::clear($ipLockoutKey);
         RateLimiter::clear($clientLockoutKey);
 
         // 6. Project user profile and roles strictly through DataProjectionService
-        $user = $authCode->user;
         $projectedProfile = $this->dataProjectionService->project(
             user: $user,
             project: $project,
@@ -244,6 +299,13 @@ class SsoAuthorizationService
 
     /**
      * Handle project logout telemetry. Project sessions are decoupled; GIAM session remains intact.
+     *
+     * @param string $clientId
+     * @param string $clientSecret
+     * @param string $externalRef
+     * @param string|null $sessionId
+     * @return array<string, string>
+     * @throws HttpException
      */
     public function handleLogoutTelemetry(
         string $clientId,

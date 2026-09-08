@@ -8,8 +8,10 @@ use App\Models\ProjectIntegration;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
+
 
 class Goal4ProjectRegistryAndIntegrationTest extends TestCase
 {
@@ -21,7 +23,19 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Inject synthetic test-only credentials — NOT real integration secrets
+        Config::set('services.centrix.frontend_url', 'http://localhost:3001');
+        Config::set('services.centrix.api_url', 'http://localhost:8002/api/giam/integration');
+        Config::set('services.centrix.client_id', 'test_centrix_client');
+        Config::set('services.centrix.client_secret', 'test_centrix_secret');
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
         $this->seed(DatabaseSeeder::class);
+
 
         $this->superAdmin = User::where('username', 'user01')->first();
 
@@ -138,13 +152,15 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
         $indexResp = $this->getJson('/api/v1/projects');
         $indexResp->assertStatus(200);
         $indexContent = $indexResp->getContent();
-        $this->assertStringNotContainsString('hrms_secret_key_12345', $indexContent);
+        $this->assertStringNotContainsString('test_hrms_secret', $indexContent);
+
 
         // 2. Fetch via project show
         $showResp = $this->getJson("/api/v1/projects/{$hrms->id}");
         $showResp->assertStatus(200);
         $showContent = $showResp->getContent();
-        $this->assertStringNotContainsString('hrms_secret_key_12345', $showContent);
+        $this->assertStringNotContainsString('test_hrms_secret', $showContent);
+
 
         // 3. Fetch via integration show
         $integrationResp = $this->getJson("/api/v1/projects/{$hrms->id}/integration");
@@ -155,12 +171,14 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
                 ],
             ]);
         $integrationContent = $integrationResp->getContent();
-        $this->assertStringNotContainsString('hrms_secret_key_12345', $integrationContent);
+        $this->assertStringNotContainsString('test_hrms_secret', $integrationContent);
+
 
         // 4. Verify in database that it is encrypted, not plaintext
         $rawInDb = ProjectIntegration::where('project_id', $hrms->id)->value('encrypted_client_secret');
-        $this->assertNotEquals('hrms_secret_key_12345', $rawInDb);
-        $this->assertEquals('hrms_secret_key_12345', $hrms->integration->getDecryptedClientSecret());
+        $this->assertNotEquals('test_hrms_secret', $rawInDb);
+        $this->assertEquals('test_hrms_secret', $hrms->integration->getDecryptedClientSecret());
+
     }
 
     /**

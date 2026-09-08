@@ -10,6 +10,11 @@ class SyncJob extends Model
 {
     use HasFactory;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'idempotency_key',
         'user_id',
@@ -26,6 +31,11 @@ class SyncJob extends Model
         'processed_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -38,11 +48,17 @@ class SyncJob extends Model
         ];
     }
 
+    /**
+     * Get the user being synchronized.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /**
+     * Get the destination project for this sync job.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');

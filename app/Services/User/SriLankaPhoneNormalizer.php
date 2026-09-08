@@ -2,10 +2,16 @@
 
 namespace App\Services\User;
 
+/**
+ * Utility service standardizing Sri Lankan telephone numbers to E.164 format (+94XXXXXXXXX).
+ */
 class SriLankaPhoneNormalizer
 {
     /**
      * Normalize a phone number to standard Sri Lankan E.164 format (+94XXXXXXXXX).
+     *
+     * @param string|null $phone
+     * @return string|null
      */
     public static function normalize(?string $phone): ?string
     {

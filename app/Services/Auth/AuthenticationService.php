@@ -10,12 +10,31 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service managing GIAM Principal authentication, credential verification,
+ * brute-force lockout defenses, and Laravel web session lifecycle.
+ *
+ * GIAM master authentication is powered by Laravel web sessions (`web` guard)
+ * with session cookie and CSRF token regeneration. It does not use Laravel Sanctum
+ * for principal authentication.
+ */
 class AuthenticationService
 {
     public function __construct(
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Authenticate a principal via username or email with exponential brute-force lockout protection.
+     *
+     * @param string $login
+     * @param string $password
+     * @param Request $request
+     * @param bool $remember
+     * @return User
+     * @throws ValidationException
+     * @throws HttpException
+     */
     public function login(string $login, string $password, Request $request, bool $remember = false): User
     {
         // 1. Locate user by username or email
@@ -180,6 +199,12 @@ class AuthenticationService
         return $user->load(['employee', 'roles', 'permissions']);
     }
 
+    /**
+     * Terminate the principal Laravel web session, invalidate state, regenerate CSRF token, and log session end.
+     *
+     * @param Request $request
+     * @return void
+     */
     public function logout(Request $request): void
     {
         $user = Auth::user();

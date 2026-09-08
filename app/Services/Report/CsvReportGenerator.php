@@ -5,10 +5,17 @@ namespace App\Services\Report;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Streaming report service writing CSV exports directly to output handles with O(1) memory.
+ */
 class CsvReportGenerator
 {
     /**
      * Stream an access report query to CSV format with constant O(1) memory usage.
+     *
+     * @param Builder $query
+     * @param string $filename
+     * @return StreamedResponse
      */
     public function streamAccessReport(Builder $query, string $filename = 'access_report.csv'): StreamedResponse
     {

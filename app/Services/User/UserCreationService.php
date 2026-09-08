@@ -10,6 +10,7 @@ use App\Services\Access\ProjectAccessAssignmentService;
 use App\Services\Audit\AuditLoggerService;
 use App\Services\Auth\PasswordSecurityService;
 use App\Services\Integration\ProjectClientFactory;
+use App\Services\Rbac\PermissionGrantAuthorityService;
 use App\Services\Sync\DataProjectionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +18,10 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service governing employee lifecycle, principal provisioning, internal Spatie RBAC assignment,
+ * privilege escalation prevention, and transient credential delivery.
+ */
 class UserCreationService
 {
     public function __construct(
@@ -24,9 +29,18 @@ class UserCreationService
         protected ProjectAccessAssignmentService $projectAccessService,
         protected ProjectClientFactory $clientFactory,
         protected PasswordSecurityService $securityService,
-        protected DataProjectionService $dataProjectionService
+        protected DataProjectionService $dataProjectionService,
+        protected PermissionGrantAuthorityService $grantAuthorityService
     ) {}
 
+    /**
+     * Create an employee master record and optionally provision a linked GIAM Principal account.
+     *
+     * @param array<string, mixed> $data
+     * @param User|null $actor
+     * @return Employee
+     * @throws HttpException
+     */
     public function createEmployee(array $data, ?User $actor = null): Employee
     {
         $createdUser = null;
@@ -75,7 +89,7 @@ class UserCreationService
 
             // If requested, provision linked login account
             if (! empty($data['create_user_account'])) {
-                if (! $actor || (! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('USER_CREATE', 'web'))) {
+                if (! $actor || ! $actor->hasPermissionTo('USER_CREATE', 'web')) {
                     throw new HttpException(403, 'Forbidden: You do not have permission to create user login accounts.');
                 }
 
@@ -84,19 +98,12 @@ class UserCreationService
                     throw new HttpException(422, 'A valid GIAM internal role must be explicitly selected.');
                 }
 
-                // Prevent privilege escalation
-                if (in_array('Super Admin', $roles) && (! $actor || ! $actor->hasRole('Super Admin'))) {
-                    throw new HttpException(403, 'Privilege escalation rejected: only Super Admin can grant Super Admin role.');
-                }
-                if (in_array('Admin', $roles) && (! $actor || (! $actor->hasRole('Super Admin') && ! $actor->hasRole('Admin')))) {
-                    throw new HttpException(403, 'Privilege escalation rejected: you cannot grant the Admin role.');
+                $targetRoles = Role::whereIn('name', $roles)->where('guard_name', 'web')->with('permissions')->get();
+                if ($targetRoles->count() !== count($roles)) {
+                    throw new HttpException(422, 'One or more selected GIAM internal roles are invalid or do not exist.');
                 }
 
-                foreach ($roles as $rName) {
-                    if (! Role::where('name', $rName)->where('guard_name', 'web')->exists()) {
-                        throw new HttpException(422, "The selected GIAM internal role [{$rName}] is invalid or does not exist.");
-                    }
-                }
+                $this->grantAuthorityService->validateRoleAssignment($actor, $targetRoles);
 
                 $rawPassword = $data['password'] ?? $this->securityService->generateTemporaryPassword();
                 $userType = $data['user_type'] ?? 'staff';
@@ -131,7 +138,7 @@ class UserCreationService
 
                 // Phase B: Persist Project Access Assignments if provided
                 if (! empty($data['project_access']) && is_array($data['project_access'])) {
-                    if ($actor && ! $actor->hasRole('Super Admin') && ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
+                    if ($actor && ! $actor->hasPermissionTo('ACCESS_ASSIGN', 'web')) {
                         throw new HttpException(403, 'Forbidden: You do not have permission to assign project access.');
                     }
 
@@ -162,6 +169,16 @@ class UserCreationService
         return $employee;
     }
 
+    /**
+     * Update an employee record, synchronize linked user attributes, and trigger downstream project syncs.
+     *
+     * @param Employee $employee
+     * @param array<string, mixed> $data
+     * @param User|null $actor
+     * @return Employee
+     * @throws \App\Exceptions\OptimisticLockException
+     * @throws HttpException
+     */
     public function updateEmployee(Employee $employee, array $data, ?User $actor = null): Employee
     {
         return DB::transaction(function () use ($employee, $data, $actor) {
@@ -228,6 +245,14 @@ class UserCreationService
         });
     }
 
+    /**
+     * Create a standalone GIAM Principal user account for an existing employee.
+     *
+     * @param array<string, mixed> $data
+     * @param User|null $actor
+     * @return User
+     * @throws HttpException
+     */
     public function createUser(array $data, ?User $actor = null): User
     {
         $rawPassword = $data['password'] ?? null;
@@ -241,19 +266,12 @@ class UserCreationService
                 throw new HttpException(422, 'A valid GIAM internal role must be explicitly selected.');
             }
 
-            // Section 40: Prevent privilege escalation
-            if (in_array('Super Admin', $roles) && (! $actor || ! $actor->hasRole('Super Admin'))) {
-                throw new HttpException(403, 'Privilege escalation rejected: only Super Admin can grant Super Admin role.');
-            }
-            if (in_array('Admin', $roles) && (! $actor || (! $actor->hasRole('Super Admin') && ! $actor->hasRole('Admin')))) {
-                throw new HttpException(403, 'Privilege escalation rejected: you cannot grant the Admin role.');
+            $targetRoles = Role::whereIn('name', $roles)->where('guard_name', 'web')->with('permissions')->get();
+            if ($targetRoles->count() !== count($roles)) {
+                throw new HttpException(422, 'One or more selected GIAM internal roles are invalid or do not exist.');
             }
 
-            foreach ($roles as $rName) {
-                if (! Role::where('name', $rName)->where('guard_name', 'web')->exists()) {
-                    throw new HttpException(422, "The selected GIAM internal role [{$rName}] is invalid or does not exist.");
-                }
-            }
+            $this->grantAuthorityService->validateRoleAssignment($actor, $targetRoles);
 
             $user = User::create([
                 'employee_code' => $data['employee_code'],
@@ -366,6 +384,11 @@ class UserCreationService
      * Generates a new temporary password, updates password hash, forces password change,
      * invalidates old temporary password, syncs credential verifier to active projects,
      * and dispatches credentials email.
+     *
+     * @param User $user
+     * @param User|null $actor
+     * @return array<string, mixed>
+     * @throws HttpException
      */
     public function resendCredentials(User $user, ?User $actor = null): array
     {
@@ -417,6 +440,16 @@ class UserCreationService
         ];
     }
 
+    /**
+     * Update GIAM Principal attributes, internal roles, and synchronize with downstream projects.
+     *
+     * @param User $user
+     * @param array<string, mixed> $data
+     * @param User|null $actor
+     * @return User
+     * @throws \App\Exceptions\OptimisticLockException
+     * @throws HttpException
+     */
     public function updateUser(User $user, array $data, ?User $actor = null): User
     {
         return DB::transaction(function () use ($user, $data, $actor) {
@@ -434,19 +467,16 @@ class UserCreationService
                 throw new HttpException(422, 'The employee code is immutable and cannot be changed.');
             }
 
-            // Section 40: Prevent privilege escalation
+            // Privilege escalation and self-lockout validation
             if (isset($data['roles'])) {
-                if (in_array('Super Admin', $data['roles']) && (! $actor || ! $actor->hasRole('Super Admin'))) {
-                    throw new HttpException(403, 'Privilege escalation rejected: only Super Admin can grant Super Admin role.');
+                $targetRoles = Role::whereIn('name', $data['roles'])->where('guard_name', 'web')->with('permissions')->get();
+                if ($targetRoles->count() !== count($data['roles'])) {
+                    throw new HttpException(422, 'One or more selected GIAM internal roles are invalid or do not exist.');
                 }
-                if (in_array('Admin', $data['roles']) && (! $actor || (! $actor->hasRole('Super Admin') && ! $actor->hasRole('Admin')))) {
-                    throw new HttpException(403, 'Privilege escalation rejected: you cannot grant the Admin role.');
-                }
-                foreach ($data['roles'] as $rName) {
-                    if (! Role::where('name', $rName)->where('guard_name', 'web')->exists()) {
-                        throw new HttpException(422, "The selected GIAM internal role [{$rName}] is invalid or does not exist.");
-                    }
-                }
+
+                $this->grantAuthorityService->validateRoleAssignment($actor, $targetRoles, $user);
+                $this->grantAuthorityService->validateUserRoleSelfLockout($actor, $user, $targetRoles);
+
                 $user->syncRoles($data['roles']);
             }
 
@@ -490,6 +520,14 @@ class UserCreationService
         });
     }
 
+    /**
+     * Dispatch UPDATE_USER outbox sync jobs for all currently ACTIVE user project accesses.
+     * Registers SyncJob (operation UPDATE_USER, status PENDING) and dispatches
+     * \App\Jobs\ExecuteSyncJob after transaction commit.
+     *
+     * @param User $user
+     * @return void
+     */
     public function syncActiveProjects(User $user): void
     {
         $activeAccesses = \App\Models\UserProjectAccess::with(['project.integration', 'roles', 'permissions'])
@@ -510,7 +548,7 @@ class UserCreationService
                 permissionIds: $access->permissions->pluck('id')->toArray()
             );
 
-            \App\Models\SyncJob::create([
+            $syncJob = \App\Models\SyncJob::create([
                 'idempotency_key' => (string) Str::uuid(),
                 'user_id' => $user->id,
                 'project_id' => $project->id,
@@ -520,9 +558,20 @@ class UserCreationService
                 'attempt_count' => 0,
                 'max_attempts' => 5,
             ]);
+
+            \App\Jobs\ExecuteSyncJob::dispatch($syncJob)->afterCommit();
         }
     }
 
+    /**
+     * Update active/login status of a user and propagate to downstream projects.
+     *
+     * @param User $user
+     * @param array<string, mixed> $data
+     * @param User|null $actor
+     * @return User
+     * @throws \App\Exceptions\OptimisticLockException
+     */
     public function updateUserStatus(User $user, array $data, ?User $actor = null): User
     {
         return DB::transaction(function () use ($user, $data, $actor) {

@@ -6,11 +6,14 @@ use App\Models\Project;
 use App\Models\ProjectPermission;
 use App\Models\ProjectRole;
 use App\Models\User;
-
 use App\Models\UserProjectAccess;
 use App\Services\Integration\ProjectClientFactory;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Service transforming internal GIAM identity attributes into downstream project payloads
+ * adhering strictly to the allowed_user_fields projection allowlist.
+ */
 class DataProjectionService
 {
     public function __construct(
@@ -20,6 +23,12 @@ class DataProjectionService
     /**
      * Transform local user identity and access into a downstream project-specific payload
      * strictly adhering to the configured project_integrations.allowed_user_fields allowlist.
+     *
+     * @param User $user
+     * @param Project $project
+     * @param array<int> $roleIds
+     * @param array<int> $permissionIds
+     * @return array<string, mixed>
      */
     public function project(
         User $user,
@@ -81,6 +90,10 @@ class DataProjectionService
     /**
      * Propagate updated bcrypt credential verifier to all active assigned projects.
      * ZERO plaintext passwords transmitted.
+     *
+     * @param User $user
+     * @param string $passwordHash
+     * @return array<string, string>
      */
     public function syncCredentialChange(User $user, string $passwordHash): array
     {

@@ -14,6 +14,11 @@ class UserProjectPermission extends Model
 
     protected $table = 'user_project_permissions';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'user_project_access_id',
         'project_permission_id',
@@ -22,6 +27,11 @@ class UserProjectPermission extends Model
         'assigned_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -30,11 +40,17 @@ class UserProjectPermission extends Model
         ];
     }
 
+    /**
+     * Get the user project access assignment owning this permission linkage.
+     */
     public function access(): BelongsTo
     {
         return $this->belongsTo(UserProjectAccess::class, 'user_project_access_id');
     }
 
+    /**
+     * Get the project permission definition linked.
+     */
     public function projectPermission(): BelongsTo
     {
         return $this->belongsTo(ProjectPermission::class, 'project_permission_id');

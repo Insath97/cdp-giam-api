@@ -10,6 +10,11 @@ class UserCreationDraft extends Model
 {
     use HasFactory;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'creator_user_id',
         'draft_token',
@@ -18,6 +23,11 @@ class UserCreationDraft extends Model
         'expires_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -27,6 +37,9 @@ class UserCreationDraft extends Model
         ];
     }
 
+    /**
+     * Get the user who authored this draft.
+     */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_user_id');

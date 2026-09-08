@@ -11,6 +11,8 @@ class UserProjectAccessSummaryResource extends JsonResource
      * Transform the resource into a summary array for list views.
      * Note: Does NOT expose project base_url or api_base_url.
      * Does NOT return full permission catalogs to keep 50+ project listings lightweight.
+     *
+     * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {

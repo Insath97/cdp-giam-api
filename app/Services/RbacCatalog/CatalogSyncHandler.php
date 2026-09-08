@@ -11,6 +11,10 @@ use App\Models\User;
 use App\Services\Audit\AuditLoggerService;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Service reconciling downstream RBAC definitions (roles, permissions, modules, groups)
+ * into GIAM's local catalog, deactivating missing remote definitions without deletion.
+ */
 class CatalogSyncHandler
 {
     public function __construct(
@@ -18,6 +22,13 @@ class CatalogSyncHandler
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Ingest and reconcile remote RBAC definitions into local project catalog.
+     *
+     * @param Project $project
+     * @param User|null $actor
+     * @return array<string, int>
+     */
     public function sync(Project $project, ?User $actor = null): array
     {
         // 1. Fetch and validate remote access definition outside DB transaction

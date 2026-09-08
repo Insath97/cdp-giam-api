@@ -21,6 +21,9 @@ class UserController extends Controller
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Display a listing of users.
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = User::with(['employee', 'roles', 'permissions']);
@@ -52,6 +55,9 @@ class UserController extends Controller
         return UserResource::collection($users);
     }
 
+    /**
+     * Store a newly created user.
+     */
     public function store(StoreUserRequest $request): JsonResponse
     {
         $user = $this->userCreationService->createUser(
@@ -64,6 +70,9 @@ class UserController extends Controller
             ->setStatusCode(201);
     }
 
+    /**
+     * Display the specified user.
+     */
     public function show(int|string $id): UserResource
     {
         $user = User::with(['employee', 'roles', 'permissions'])
@@ -74,6 +83,9 @@ class UserController extends Controller
         return new UserResource($user);
     }
 
+    /**
+     * Update the specified user.
+     */
     public function update(UpdateUserRequest $request, int|string $id): UserResource
     {
         $user = User::where('id', $id)
@@ -89,21 +101,9 @@ class UserController extends Controller
         return new UserResource($updated);
     }
 
-    public function updateStatus(UpdateUserStatusRequest $request, int|string $id): UserResource
-    {
-        $user = User::where('id', $id)
-            ->orWhere('username', $id)
-            ->firstOrFail();
-
-        $updated = $this->userCreationService->updateUserStatus(
-            $user,
-            $request->validated(),
-            $request->user()
-        );
-
-        return new UserResource($updated);
-    }
-
+    /**
+     * Remove / deactivate the specified user.
+     */
     public function destroy(Request $request, int|string $id): JsonResponse
     {
         $user = User::where('id', $id)
@@ -130,6 +130,27 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * Update the active and login status of the specified user.
+     */
+    public function updateStatus(UpdateUserStatusRequest $request, int|string $id): UserResource
+    {
+        $user = User::where('id', $id)
+            ->orWhere('username', $id)
+            ->firstOrFail();
+
+        $updated = $this->userCreationService->updateUserStatus(
+            $user,
+            $request->validated(),
+            $request->user()
+        );
+
+        return new UserResource($updated);
+    }
+
+    /**
+     * Regenerate and resend initial credentials to the user.
+     */
     public function resendCredentials(Request $request, int|string $id): JsonResponse
     {
         $user = User::where('id', $id)

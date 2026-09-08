@@ -20,6 +20,9 @@ class EmployeeController extends Controller
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Display a listing of employees.
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Employee::with(['province', 'zone', 'region', 'branch', 'department', 'designation', 'user']);
@@ -51,6 +54,9 @@ class EmployeeController extends Controller
         return EmployeeResource::collection($employees);
     }
 
+    /**
+     * Store a newly created employee.
+     */
     public function store(StoreEmployeeRequest $request): JsonResponse
     {
         $employee = $this->userCreationService->createEmployee(
@@ -63,6 +69,9 @@ class EmployeeController extends Controller
             ->setStatusCode(201);
     }
 
+    /**
+     * Display the specified employee.
+     */
     public function show(int|string $id): EmployeeResource
     {
         $employee = Employee::with(['province', 'zone', 'region', 'branch', 'department', 'designation', 'user', 'reportingManager'])
@@ -73,6 +82,9 @@ class EmployeeController extends Controller
         return new EmployeeResource($employee);
     }
 
+    /**
+     * Update the specified employee.
+     */
     public function update(UpdateEmployeeRequest $request, int|string $id): EmployeeResource
     {
         $employee = Employee::where('id', $id)
@@ -88,6 +100,9 @@ class EmployeeController extends Controller
         return new EmployeeResource($updated);
     }
 
+    /**
+     * Deactivate the specified employee.
+     */
     public function destroy(Request $request, int|string $id): JsonResponse
     {
         $employee = Employee::where('id', $id)

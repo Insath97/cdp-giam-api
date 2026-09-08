@@ -17,6 +17,11 @@ class User extends Authenticatable
 
     protected $guard_name = 'web';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'employee_code',
         'name',
@@ -37,11 +42,21 @@ class User extends Authenticatable
         'version',
     ];
 
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var list<string>
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -59,46 +74,73 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Check if the user is eligible for self-service password reset.
+     */
     public function canPerformSelfServicePasswordReset(): bool
     {
         return $this->self_service_reset_count < 3;
     }
 
+    /**
+     * Get the employee profile associated with the user.
+     */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_code', 'employee_code');
     }
 
+    /**
+     * Get the project access entitlements assigned to the user.
+     */
     public function projectAccesses(): HasMany
     {
         return $this->hasMany(UserProjectAccess::class, 'user_id');
     }
 
+    /**
+     * Get the downstream provisioning sync jobs triggered for the user.
+     */
     public function syncJobs(): HasMany
     {
         return $this->hasMany(SyncJob::class, 'user_id');
     }
 
+    /**
+     * Get the SSO authorization codes generated for the user.
+     */
     public function ssoAuthCodes(): HasMany
     {
         return $this->hasMany(SsoAuthCode::class, 'user_id');
     }
 
+    /**
+     * Get the password reset assistance requests submitted for the user.
+     */
     public function passwordResetRequests(): HasMany
     {
         return $this->hasMany(PasswordResetRequest::class, 'user_id');
     }
 
+    /**
+     * Get the password reset tokens issued for the user.
+     */
     public function passwordResetTokens(): HasMany
     {
         return $this->hasMany(PasswordResetToken::class, 'user_id');
     }
 
+    /**
+     * Get the audit logs where this user acted as the actor.
+     */
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class, 'actor_user_id');
     }
 
+    /**
+     * Get the user creation drafts created by this user.
+     */
     public function drafts(): HasMany
     {
         return $this->hasMany(UserCreationDraft::class, 'creator_user_id');

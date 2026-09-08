@@ -23,11 +23,6 @@ class RequireGiamPermission
             ], 401);
         }
 
-        // Super Admin bypasses all specific GIAM permission checks
-        if ($user->hasRole('Super Admin')) {
-            return $next($request);
-        }
-
         foreach ($permissions as $permission) {
             if ($user->hasPermissionTo($permission, 'web')) {
                 return $next($request);

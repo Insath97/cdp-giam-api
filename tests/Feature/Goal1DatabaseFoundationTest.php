@@ -18,8 +18,10 @@ use App\Models\UserProjectAccess;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
+
 
 class Goal1DatabaseFoundationTest extends TestCase
 {
@@ -28,8 +30,20 @@ class Goal1DatabaseFoundationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Inject synthetic test-only credentials — NOT real integration secrets
+        Config::set('services.centrix.frontend_url', 'http://localhost:3001');
+        Config::set('services.centrix.api_url', 'http://localhost:8002/api/giam/integration');
+        Config::set('services.centrix.client_id', 'test_centrix_client');
+        Config::set('services.centrix.client_secret', 'test_centrix_secret');
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
         $this->seed(DatabaseSeeder::class);
     }
+
 
     /**
      * Test 1: Verify all 28 tables exist in MySQL database.
@@ -250,7 +264,8 @@ class Goal1DatabaseFoundationTest extends TestCase
         $this->assertNotNull($hrms);
         $this->assertNotNull($hrms->integration);
         $this->assertContains('id_number', $hrms->integration->allowed_user_fields);
-        $this->assertEquals('hrms_secret_key_12345', $hrms->integration->getDecryptedClientSecret());
+        $this->assertEquals('test_hrms_secret', $hrms->integration->getDecryptedClientSecret());
+
 
         $centrix = Project::where('code', 'centrix')->first();
         $this->assertNotNull($centrix);

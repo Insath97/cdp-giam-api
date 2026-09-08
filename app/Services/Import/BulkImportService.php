@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Audit\AuditLoggerService;
+use App\Services\Rbac\PermissionGrantAuthorityService;
 use App\Services\User\UserCreationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -15,15 +16,22 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service orchestrating batch employee and user principal ingestion from CSV templates,
+ * row-level validation, atomic persistence, and initial credential generation.
+ */
 class BulkImportService
 {
     public function __construct(
         protected AuditLoggerService $auditLogger,
-        protected UserCreationService $userCreationService
+        protected UserCreationService $userCreationService,
+        protected PermissionGrantAuthorityService $grantAuthorityService
     ) {}
 
     /**
      * Plain column headers for Employee CSV Template.
+     *
+     * @return list<string>
      */
     public function getEmployeeTemplateHeaders(): array
     {
@@ -53,15 +61,16 @@ class BulkImportService
     }
 
     /**
-     * Plain column headers for User / Principal CSV Template.
-     * Note: NO plaintext password column. Server automatically generates secure temporary passwords.
+     * Plain column headers for User CSV Template (omits plaintext password column).
+     *
+     * @return list<string>
      */
     public function getUserTemplateHeaders(): array
     {
         return [
             'employee_code',
-            'username',
             'name',
+            'username',
             'email',
             'user_type',
             'is_active',
@@ -71,7 +80,12 @@ class BulkImportService
     }
 
     /**
-     * Process bulk employee import.
+     * Process and ingest an uploaded Employee CSV file.
+     *
+     * @param UploadedFile $file
+     * @param User $actor
+     * @return array<string, mixed>
+     * @throws HttpException
      */
     public function importEmployees(UploadedFile $file, User $actor): array
     {
@@ -266,6 +280,11 @@ class BulkImportService
     /**
      * Process bulk User / Principal import.
      * Generates server-side temporary password and sets must_change_password = true.
+     *
+     * @param UploadedFile $file
+     * @param User $actor
+     * @return array<string, mixed>
+     * @throws HttpException
      */
     public function importUsers(UploadedFile $file, User $actor): array
     {
@@ -394,6 +413,14 @@ class BulkImportService
 
             try {
                 $roleName = ! empty($data['role']) ? $data['role'] : 'Staff';
+
+                // Privilege escalation validation for role assignment
+                $targetRole = Role::where('name', $roleName)->where('guard_name', 'web')->with('permissions')->first();
+                if (! $targetRole) {
+                    throw new \RuntimeException("The selected GIAM internal role [{$roleName}] is invalid or does not exist.");
+                }
+                $this->grantAuthorityService->validateRoleAssignment($actor, collect([$targetRole]));
+
                 $rawPassword = Str::random(16) . '@A1';
 
                 $createdUser = DB::transaction(function () use ($data, $rawPassword, $roleName, $actor) {

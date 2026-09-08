@@ -396,4 +396,166 @@ class CentrixIntegrationSecretManagementTest extends TestCase
         $replayExchange->assertStatus(400);
         $replayExchange->assertSee('Authorization code has already been redeemed.');
     }
+
+    // =========================================================================
+    // HRMS & Payroll Integration Secret Management Tests
+    // =========================================================================
+
+    /**
+     * 1. HRMS seeder fails fast when HRMS client secret config is missing.
+     */
+    public function test_hrms_seeder_fails_fast_when_client_secret_missing(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', null);
+
+        $seeder = new ProjectRegistrySeeder();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('[HRMS_CLIENT_SECRET]');
+
+        $seeder->run();
+    }
+
+    /**
+     * 2. HRMS seeder fails fast when HRMS client ID config is missing.
+     */
+    public function test_hrms_seeder_fails_fast_when_client_id_missing(): void
+    {
+        Config::set('services.hrms.client_id', null);
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('[HRMS_CLIENT_ID]');
+
+        $seeder->run();
+    }
+
+    /**
+     * 3. Payroll seeder fails fast when Payroll client secret config is missing.
+     */
+    public function test_payroll_seeder_fails_fast_when_client_secret_missing(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', null);
+
+        $seeder = new ProjectRegistrySeeder();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('[PAYROLL_CLIENT_SECRET]');
+
+        $seeder->run();
+    }
+
+    /**
+     * 4. Payroll seeder fails fast when Payroll client ID config is missing.
+     */
+    public function test_payroll_seeder_fails_fast_when_client_id_missing(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', null);
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('[PAYROLL_CLIENT_ID]');
+
+        $seeder->run();
+    }
+
+    /**
+     * 5. HRMS configured secret is encrypted at rest and round-trips correctly.
+     */
+    public function test_hrms_configured_secret_is_encrypted_at_rest(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+        $seeder->run();
+
+        $hrms = Project::with('integration')->where('code', 'hrms')->firstOrFail();
+
+        // Raw DB column must NOT be the plaintext value
+        $rawInDb = ProjectIntegration::where('project_id', $hrms->id)->value('encrypted_client_secret');
+        $this->assertNotEquals('test_hrms_secret', $rawInDb);
+        $this->assertNotEmpty($rawInDb);
+
+        // Decrypted value must match what was configured
+        $this->assertEquals('test_hrms_secret', $hrms->integration->getDecryptedClientSecret());
+    }
+
+    /**
+     * 6. Payroll configured secret is encrypted at rest and round-trips correctly.
+     */
+    public function test_payroll_configured_secret_is_encrypted_at_rest(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+        $seeder->run();
+
+        $payroll = Project::with('integration')->where('code', 'payroll')->firstOrFail();
+
+        $rawInDb = ProjectIntegration::where('project_id', $payroll->id)->value('encrypted_client_secret');
+        $this->assertNotEquals('test_payroll_secret', $rawInDb);
+        $this->assertNotEmpty($rawInDb);
+
+        $this->assertEquals('test_payroll_secret', $payroll->integration->getDecryptedClientSecret());
+    }
+
+    /**
+     * 7. HRMS and Payroll secrets are absent from API serialization.
+     */
+    public function test_hrms_and_payroll_secrets_absent_from_api_serialization(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+        $seeder->run();
+
+        $this->actingAs($this->adminUser, 'web');
+
+        $response = $this->getJson('/api/v1/projects');
+        $response->assertStatus(200);
+        $body = $response->getContent();
+
+        $this->assertStringNotContainsString('test_hrms_secret', $body);
+        $this->assertStringNotContainsString('test_payroll_secret', $body);
+        $this->assertStringNotContainsString('encrypted_client_secret', $body);
+    }
+
+    /**
+     * 8. ProjectRegistrySeeder with HRMS and Payroll config is idempotent.
+     */
+    public function test_hrms_payroll_seeder_is_idempotent(): void
+    {
+        Config::set('services.hrms.client_id', 'test_hrms_client');
+        Config::set('services.hrms.client_secret', 'test_hrms_secret');
+        Config::set('services.payroll.client_id', 'test_payroll_client');
+        Config::set('services.payroll.client_secret', 'test_payroll_secret');
+
+        $seeder = new ProjectRegistrySeeder();
+        $seeder->run();
+        $seeder->run(); // Second run must not throw or duplicate
+
+        $this->assertEquals(1, Project::where('code', 'hrms')->count());
+        $this->assertEquals(1, Project::where('code', 'payroll')->count());
+        $this->assertEquals(1, ProjectIntegration::whereHas('project', fn ($q) => $q->where('code', 'hrms'))->count());
+        $this->assertEquals(1, ProjectIntegration::whereHas('project', fn ($q) => $q->where('code', 'payroll'))->count());
+    }
 }

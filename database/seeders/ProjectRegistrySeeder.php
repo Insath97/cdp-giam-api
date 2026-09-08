@@ -11,6 +11,18 @@ class ProjectRegistrySeeder extends Seeder
     public function run(): void
     {
         // 1. HRMS Project
+        $hrmsApiUrl = config('services.hrms.api_url') ?: 'http://localhost:8001/api/giam/integration';
+
+        $hrmsClientId = config('services.hrms.client_id');
+        if (empty($hrmsClientId) || trim((string) $hrmsClientId) === '') {
+            throw new \RuntimeException('Missing required integration credential: [HRMS_CLIENT_ID]');
+        }
+
+        $hrmsSecret = config('services.hrms.client_secret');
+        if (empty($hrmsSecret) || trim((string) $hrmsSecret) === '') {
+            throw new \RuntimeException('Missing required integration credential: [HRMS_CLIENT_SECRET]');
+        }
+
         $hrms = Project::updateOrCreate(
             ['code' => 'hrms'],
             [
@@ -25,10 +37,10 @@ class ProjectRegistrySeeder extends Seeder
         ProjectIntegration::updateOrCreate(
             ['project_id' => $hrms->id],
             [
-                'api_base_url' => 'http://localhost:8001/api/giam/integration',
+                'api_base_url' => $hrmsApiUrl,
                 'auth_method' => 'bearer_token',
-                'client_id' => 'giam_hrms_client',
-                'client_secret' => 'hrms_secret_key_12345',
+                'client_id' => trim((string) $hrmsClientId),
+                'client_secret' => trim((string) $hrmsSecret),
                 'allowed_user_fields' => [
                     'employee_code',
                     'f_name',
@@ -105,6 +117,18 @@ class ProjectRegistrySeeder extends Seeder
         );
 
         // 3. Payroll Project
+        $payrollApiUrl = config('services.payroll.api_url') ?: 'http://localhost:8003/api/giam/integration';
+
+        $payrollClientId = config('services.payroll.client_id');
+        if (empty($payrollClientId) || trim((string) $payrollClientId) === '') {
+            throw new \RuntimeException('Missing required integration credential: [PAYROLL_CLIENT_ID]');
+        }
+
+        $payrollSecret = config('services.payroll.client_secret');
+        if (empty($payrollSecret) || trim((string) $payrollSecret) === '') {
+            throw new \RuntimeException('Missing required integration credential: [PAYROLL_CLIENT_SECRET]');
+        }
+
         $payroll = Project::updateOrCreate(
             ['code' => 'payroll'],
             [
@@ -119,10 +143,10 @@ class ProjectRegistrySeeder extends Seeder
         ProjectIntegration::updateOrCreate(
             ['project_id' => $payroll->id],
             [
-                'api_base_url' => 'http://localhost:8003/api/giam/integration',
+                'api_base_url' => $payrollApiUrl,
                 'auth_method' => 'bearer_token',
-                'client_id' => 'giam_payroll_client',
-                'client_secret' => 'payroll_secret_key_11223',
+                'client_id' => trim((string) $payrollClientId),
+                'client_secret' => trim((string) $payrollSecret),
                 'allowed_user_fields' => [
                     'employee_code',
                     'f_name',

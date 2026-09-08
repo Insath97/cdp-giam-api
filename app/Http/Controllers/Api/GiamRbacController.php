@@ -9,6 +9,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Audit\AuditLoggerService;
+use App\Services\Rbac\PermissionGrantAuthorityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,35 +18,52 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class GiamRbacController extends Controller
 {
     public function __construct(
-        protected AuditLoggerService $auditLogger
+        protected AuditLoggerService $auditLogger,
+        protected PermissionGrantAuthorityService $grantAuthorityService
     ) {}
 
     /**
      * Get complete GIAM Internal RBAC hierarchy:
      * Module -> Permission Group -> Permission
      */
-    public function hierarchy(): JsonResponse
+    public function hierarchy(Request $request): JsonResponse
     {
+        $actor = $request->user();
         $modules = GiamModule::with(['permissionGroups.permissions'])
             ->orderBy('order_index')
             ->get();
 
+        $data = $modules->map(function ($mod) use ($actor) {
+            $modData = $mod->toArray();
+            if (isset($modData['permission_groups'])) {
+                foreach ($modData['permission_groups'] as &$group) {
+                    if (isset($group['permissions'])) {
+                        foreach ($group['permissions'] as &$perm) {
+                            $perm['is_grantable'] = $this->grantAuthorityService->canGrantPermission($actor, $perm['name']);
+                        }
+                    }
+                }
+            }
+            return $modData;
+        });
+
         return response()->json([
             'status' => 'success',
-            'data' => $modules,
+            'data' => $data,
         ]);
     }
 
     /**
      * Get all GIAM internal roles and their derived modules/groups/permissions.
      */
-    public function roles(): JsonResponse
+    public function roles(Request $request): JsonResponse
     {
+        $actor = $request->user();
         $roles = Role::where('guard_name', 'web')
             ->with(['permissions.permissionGroup.module'])
             ->get();
 
-        $data = $roles->map(function ($role) {
+        $data = $roles->map(function ($role) use ($actor) {
             $permissions = $role->permissions;
 
             // Group permissions by module and permission group
@@ -96,6 +114,7 @@ class GiamRbacController extends Controller
                 'name' => $role->name,
                 'description' => $role->description,
                 'is_system_reserved' => (bool) $role->is_system_reserved,
+                'is_grantable' => $this->grantAuthorityService->canAssignRoles($actor, collect([$role])),
                 'permission_names' => $permissions->pluck('name')->toArray(),
                 'permission_ids' => $permissions->pluck('id')->toArray(),
                 'modules_count' => count($resolvedModules),
@@ -306,6 +325,12 @@ class GiamRbacController extends Controller
 
         $requestedNames = $validated['permissions'];
 
+        // Validate that the actor has grant authority for requested permissions
+        $this->grantAuthorityService->validatePermissionGrant($request->user(), $requestedNames);
+
+        // Prevent self-lockout if editing an assigned role
+        $this->grantAuthorityService->validatePermissionSelfLockout($request->user(), $role, $requestedNames);
+
         // If role is Super Admin, ensure it retains essential administration capability
         if ($role->name === 'Super Admin') {
             if (! in_array('GIAM_ROLE_MANAGE', $requestedNames, true) || ! in_array('GIAM_ROLE_VIEW', $requestedNames, true)) {
@@ -326,6 +351,9 @@ class GiamRbacController extends Controller
 
         $beforePermissions = $role->permissions->pluck('name')->toArray();
         $role->syncPermissions($validPermissions);
+
+        // Invalidate Spatie permission cache
+        app()->make(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 
         $this->auditLogger->log(
             action: 'ROLE_PERMISSIONS_CHANGED',

@@ -6,10 +6,16 @@ use App\Models\UserProjectAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
+/**
+ * Query builder service compiling multi-dimensional filters for access reports.
+ */
 class AccessReportQueryService
 {
     /**
      * Build the base query for user project access reporting with all filter dimensions.
+     *
+     * @param Request|array<string, mixed> $filters
+     * @return Builder
      */
     public function buildQuery(Request|array $filters): Builder
     {

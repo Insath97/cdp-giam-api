@@ -4,10 +4,18 @@ namespace App\Services\Auth;
 
 use App\Models\User;
 
+/**
+ * Service generating and validating signed HS256 JWTs for GIAM Principals
+ * using APP_KEY without external state overhead.
+ */
 class SimpleJwtService
 {
     /**
      * Generate a signed HS256 JWT for the GIAM Principal.
+     *
+     * @param User $user
+     * @param int $ttlSeconds
+     * @return string
      */
     public static function generateToken(User $user, int $ttlSeconds = 86400): string
     {
@@ -33,6 +41,9 @@ class SimpleJwtService
 
     /**
      * Validate and decode a signed HS256 JWT. Returns User ID if valid.
+     *
+     * @param string $token
+     * @return int|null
      */
     public static function validateToken(string $token): ?int
     {

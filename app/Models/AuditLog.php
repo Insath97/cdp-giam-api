@@ -13,6 +13,11 @@ class AuditLog extends Model
 
     public $timestamps = false;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'actor_user_id',
         'action',
@@ -29,6 +34,11 @@ class AuditLog extends Model
         'created_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -53,11 +63,17 @@ class AuditLog extends Model
         });
     }
 
+    /**
+     * Get the user who performed the audited action.
+     */
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_user_id');
     }
 
+    /**
+     * Get the project associated with the audited action.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');

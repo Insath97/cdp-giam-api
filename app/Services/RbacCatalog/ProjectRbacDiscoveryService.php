@@ -7,6 +7,9 @@ use App\Services\Integration\ProjectClientFactory;
 use Exception;
 use RuntimeException;
 
+/**
+ * Service querying downstream project endpoints to fetch published RBAC definitions.
+ */
 class ProjectRbacDiscoveryService
 {
     public function __construct(
@@ -15,6 +18,10 @@ class ProjectRbacDiscoveryService
 
     /**
      * Fetch the RBAC access definition from downstream project.
+     *
+     * @param Project $project
+     * @return array<string, array<mixed>>
+     * @throws RuntimeException
      */
     public function fetchAccessDefinition(Project $project): array
     {

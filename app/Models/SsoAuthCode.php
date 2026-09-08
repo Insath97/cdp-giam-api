@@ -14,6 +14,11 @@ class SsoAuthCode extends Model
 
     protected $table = 'sso_auth_codes';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'code_hash',
         'user_id',
@@ -26,6 +31,11 @@ class SsoAuthCode extends Model
         'created_at',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -35,11 +45,17 @@ class SsoAuthCode extends Model
         ];
     }
 
+    /**
+     * Get the user / principal for whom this authorization code was issued.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /**
+     * Get the target project for which this authorization code is valid.
+     */
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_id');

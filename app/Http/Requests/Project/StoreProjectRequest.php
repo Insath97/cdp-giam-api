@@ -32,11 +32,19 @@ class StoreProjectRequest extends FormRequest
         'end_date',
     ];
 
+    /**
+     * Determine if the user is authorized to make this request.
+     */
     public function authorize(): bool
     {
         return true;
     }
 
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
     public function rules(): array
     {
         return [
@@ -51,7 +59,7 @@ class StoreProjectRequest extends FormRequest
             'integration' => ['nullable', 'array'],
             'integration.api_base_url' => ['required_with:integration', 'url', 'max:255'],
             'integration.auth_method' => ['sometimes', Rule::in(['bearer_token', 'oauth2', 'hmac', 'api_key'])],
-            'integration.client_id' => ['nullable', 'string', 'max:100'],
+            'integration.client_id' => ['nullable', 'string', 'max:100', 'unique:project_integrations,client_id'],
             'integration.client_secret' => ['nullable', 'string'],
             'integration.allowed_user_fields' => ['required_with:integration', 'array'],
             'integration.allowed_user_fields.*' => ['string', Rule::in(self::VALID_PROJECTION_FIELDS)],
@@ -60,6 +68,11 @@ class StoreProjectRequest extends FormRequest
         ];
     }
 
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array<string, string>
+     */
     public function messages(): array
     {
         return [

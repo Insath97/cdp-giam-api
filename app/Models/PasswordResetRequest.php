@@ -12,6 +12,11 @@ class PasswordResetRequest extends Model
 
     protected $table = 'password_reset_requests';
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'user_id',
         'status',
@@ -22,6 +27,11 @@ class PasswordResetRequest extends Model
         'ip_address',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -30,11 +40,17 @@ class PasswordResetRequest extends Model
         ];
     }
 
+    /**
+     * Get the user who requested password assistance.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /**
+     * Get the administrator who reviewed this assistance request.
+     */
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by_user_id');

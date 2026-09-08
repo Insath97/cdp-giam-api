@@ -7,8 +7,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
+/**
+ * Service providing high-fidelity compliance audit logging with automatic
+ * request correlation, contextual actor binding, and recursive sensitive data masking.
+ */
 class AuditLoggerService
 {
+    /**
+     * Keys subjected to automatic redaction.
+     *
+     * @var list<string>
+     */
     protected static array $sensitiveKeys = [
         'password',
         'password_confirmation',
@@ -20,6 +29,21 @@ class AuditLoggerService
         'authorization',
     ];
 
+    /**
+     * Record an audit log entry with automatic metadata enrichment and sensitive data masking.
+     *
+     * @param string $action
+     * @param string $entityType
+     * @param string $entityId
+     * @param array<string, mixed>|null $beforeData
+     * @param array<string, mixed>|null $afterData
+     * @param string $status
+     * @param int|null $projectId
+     * @param array<string, mixed>|null $metadata
+     * @param int|null $actorUserId
+     * @param Request|null $request
+     * @return AuditLog
+     */
     public function log(
         string $action,
         string $entityType,
@@ -56,6 +80,12 @@ class AuditLoggerService
         ]);
     }
 
+    /**
+     * Recursively mask sensitive keys in payload arrays with [REDACTED].
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
     public function maskSensitiveFields(array $data): array
     {
         $sanitized = [];

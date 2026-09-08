@@ -8,10 +8,20 @@ use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Psr\Http\Message\RequestInterface;
 
+/**
+ * Factory service constructing pre-configured Laravel HTTP client instances
+ * scoped to downstream project endpoints with resolved authentication credentials.
+ */
 class ProjectClientFactory
 {
     /**
      * Create a pre-configured HTTP client for communication with a downstream project.
+     * Supports auth_method: bearer_token, api_key, oauth2 (basic auth on request), and hmac (SHA-256 signing).
+     *
+     * @param Project $project
+     * @param int $timeoutSeconds
+     * @return PendingRequest
+     * @throws InvalidArgumentException When the project has no integration configured.
      */
     public function make(Project $project, int $timeoutSeconds = 5): PendingRequest
     {

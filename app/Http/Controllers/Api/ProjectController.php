@@ -20,6 +20,9 @@ class ProjectController extends Controller
         protected AuditLoggerService $auditLogger
     ) {}
 
+    /**
+     * Display a listing of projects.
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Project::with('integration')
@@ -42,6 +45,9 @@ class ProjectController extends Controller
         return ProjectResource::collection($projects);
     }
 
+    /**
+     * Store a newly created project and optional integration.
+     */
     public function store(StoreProjectRequest $request): JsonResponse
     {
         $project = DB::transaction(function () use ($request) {
@@ -92,6 +98,9 @@ class ProjectController extends Controller
             ->setStatusCode(201);
     }
 
+    /**
+     * Display the specified project.
+     */
     public function show(int|string $id): ProjectResource
     {
         $project = Project::with('integration')
@@ -103,6 +112,9 @@ class ProjectController extends Controller
         return new ProjectResource($project);
     }
 
+    /**
+     * Update the specified project.
+     */
     public function update(UpdateProjectRequest $request, int|string $id): ProjectResource
     {
         $project = Project::where('id', $id)
@@ -126,6 +138,9 @@ class ProjectController extends Controller
         return new ProjectResource($project->fresh('integration'));
     }
 
+    /**
+     * Disable the specified project.
+     */
     public function destroy(Request $request, int|string $id): JsonResponse
     {
         $project = Project::where('id', $id)

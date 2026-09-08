@@ -10,17 +10,50 @@ use App\Models\SyncJob;
 use App\Models\User;
 use App\Models\UserProjectAccess;
 use App\Services\Audit\AuditLoggerService;
+use App\Services\Sync\DataProjectionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service governing user project access assignment, multi-project isolation,
+ * optimistic concurrency versioning, and transactional outbox sync creation.
+ *
+ * Outbox workflow:
+ * 1. Local DB transaction:
+ *    - UserProjectAccess created/updated with status = 'PENDING'
+ *    - SyncJob created with status = 'PENDING', operation = 'CREATE_USER'|'ASSIGN_ACCESS'|'REVOKE_ACCESS'
+ * 2. Commit transaction.
+ * 3. Asynchronous queue job `\App\Jobs\ExecuteSyncJob` dispatched `afterCommit`.
+ * 4. ProvisioningSyncWorker processes job:
+ *    - Claims job atomically: SyncJob status becomes 'PROCESSING'.
+ *    - Sends downstream HTTP request with idempotency key headers.
+ *    - On HTTP 2xx: SyncJob status becomes 'SUCCESS'; UserProjectAccess becomes 'ACTIVE' (for grants)
+ *      or stays 'REVOKED' (for revocations).
+ *    - On failure: SyncJob status becomes 'RETRYING' (exponential backoff) or 'FAILED' (at max attempts).
+ */
 class ProjectAccessAssignmentService
 {
     public function __construct(
         protected AuditLoggerService $auditLogger,
-        protected \App\Services\Sync\DataProjectionService $dataProjectionService
+        protected DataProjectionService $dataProjectionService
     ) {}
 
+    /**
+     * Assign or re-grant project access with validated project-specific roles and permissions.
+     * Writes UserProjectAccess in PENDING status, registers transactional outbox SyncJob (PENDING),
+     * and dispatches \App\Jobs\ExecuteSyncJob after transaction commit.
+     *
+     * @param User $user
+     * @param int $projectId
+     * @param array<int> $roleIds
+     * @param array<int> $permissionIds
+     * @param User $actor
+     * @param int|null $expectedVersion
+     * @return UserProjectAccess
+     * @throws HttpException
+     * @throws OptimisticLockException
+     */
     public function assignAccess(
         User $user,
         int $projectId,
@@ -181,7 +214,7 @@ class ProjectAccessAssignmentService
             $access->permissions()->sync($syncPerms);
 
             // Write transactional outbox sync_jobs record
-            SyncJob::create([
+            $syncJob = SyncJob::create([
                 'idempotency_key' => (string) Str::uuid(),
                 'user_id' => $user->id,
                 'project_id' => $project->id,
@@ -191,6 +224,9 @@ class ProjectAccessAssignmentService
                 'attempt_count' => 0,
                 'max_attempts' => 5,
             ]);
+
+            // Dispatch fast asynchronous queue job (processes immediately once transaction commits)
+            \App\Jobs\ExecuteSyncJob::dispatch($syncJob)->afterCommit();
 
             // Audit log
             $auditAction = $isNew
@@ -219,6 +255,19 @@ class ProjectAccessAssignmentService
         });
     }
 
+    /**
+     * Revoke project access, set status to REVOKED, and dispatch de-provisioning outbox sync job.
+     * Writes transactional outbox SyncJob (operation REVOKE_ACCESS, status PENDING) and
+     * dispatches \App\Jobs\ExecuteSyncJob after transaction commit.
+     *
+     * @param User $user
+     * @param int $projectId
+     * @param User $actor
+     * @param string|null $reason
+     * @param int|null $expectedVersion
+     * @return UserProjectAccess
+     * @throws OptimisticLockException
+     */
     public function revokeAccess(
         User $user,
         int $projectId,
@@ -247,7 +296,7 @@ class ProjectAccessAssignmentService
             $access->save();
 
             // Transactional outbox sync_jobs record for downstream de-provisioning
-            SyncJob::create([
+            $syncJob = SyncJob::create([
                 'idempotency_key' => (string) Str::uuid(),
                 'user_id' => $user->id,
                 'project_id' => $projectId,
@@ -261,6 +310,9 @@ class ProjectAccessAssignmentService
                 'attempt_count' => 0,
                 'max_attempts' => 5,
             ]);
+
+            // Dispatch fast asynchronous queue job (processes immediately once transaction commits)
+            \App\Jobs\ExecuteSyncJob::dispatch($syncJob)->afterCommit();
 
             // Audit log
             $this->auditLogger->log(

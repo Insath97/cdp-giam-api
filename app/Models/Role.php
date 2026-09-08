@@ -6,6 +6,11 @@ use Spatie\Permission\Models\Role as SpatieRole;
 
 class Role extends SpatieRole
 {
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'name',
         'guard_name',
@@ -13,6 +18,11 @@ class Role extends SpatieRole
         'is_system_reserved',
     ];
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -20,3 +30,4 @@ class Role extends SpatieRole
         ];
     }
 }
+

@@ -47,26 +47,6 @@ class UserProjectAccessController extends Controller
     }
 
     /**
-     * Detailed single project access record for one Principal.
-     * Distinguishes assigned roles from direct per-user permission overrides without leaking API URLs.
-     */
-    public function show(Request $request, int|string $userId, int $projectId): JsonResponse
-    {
-        $user = User::where('id', $userId)
-            ->orWhere('username', $userId)
-            ->firstOrFail();
-
-        $access = UserProjectAccess::with(['project', 'roles', 'permissions'])
-            ->where('user_id', $user->id)
-            ->where('project_id', $projectId)
-            ->firstOrFail();
-
-        return (new UserProjectAccessResource($access))
-            ->response()
-            ->setStatusCode(200);
-    }
-
-    /**
      * Grant or re-grant access to a project for one Principal.
      */
     public function store(AssignProjectAccessRequest $request, int|string $userId): JsonResponse
@@ -83,6 +63,26 @@ class UserProjectAccessController extends Controller
             actor: $request->user(),
             expectedVersion: $request->input('version') !== null ? $request->integer('version') : null
         );
+
+        return (new UserProjectAccessResource($access))
+            ->response()
+            ->setStatusCode(200);
+    }
+
+    /**
+     * Detailed single project access record for one Principal.
+     * Distinguishes assigned roles from direct per-user permission overrides without leaking API URLs.
+     */
+    public function show(Request $request, int|string $userId, int $projectId): JsonResponse
+    {
+        $user = User::where('id', $userId)
+            ->orWhere('username', $userId)
+            ->firstOrFail();
+
+        $access = UserProjectAccess::with(['project', 'roles', 'permissions'])
+            ->where('user_id', $user->id)
+            ->where('project_id', $projectId)
+            ->firstOrFail();
 
         return (new UserProjectAccessResource($access))
             ->response()

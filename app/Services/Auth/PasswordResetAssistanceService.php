@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service managing administrator-assisted password reset workflows, concurrency row locks,
+ * status transitions, and transient credential generation.
+ */
 class PasswordResetAssistanceService
 {
     public function __construct(
@@ -24,6 +28,10 @@ class PasswordResetAssistanceService
     /**
      * Public submission of password reset assistance request.
      * Guaranteed enumeration-safe with transactional concurrency locking.
+     *
+     * @param string $identifier
+     * @param string|null $ip
+     * @return array<string, string>
      */
     public function submitRequest(string $identifier, ?string $ip = null): array
     {
@@ -74,6 +82,11 @@ class PasswordResetAssistanceService
      * Authoritative admin approval of assistance request.
      * Uses DB::transaction, lockForUpdate(), re-checks PENDING, updates password hash,
      * sets must_change_password = true, preserves lifetime self_service_reset_count.
+     *
+     * @param int $requestId
+     * @param User $actor
+     * @return PasswordResetRequest
+     * @throws HttpException
      */
     public function approveRequest(int $requestId, User $actor): PasswordResetRequest
     {
@@ -135,6 +148,12 @@ class PasswordResetAssistanceService
 
     /**
      * Authoritative admin rejection of assistance request.
+     *
+     * @param int $requestId
+     * @param string|null $notes
+     * @param User $actor
+     * @return PasswordResetRequest
+     * @throws HttpException
      */
     public function rejectRequest(int $requestId, ?string $notes, User $actor): PasswordResetRequest
     {

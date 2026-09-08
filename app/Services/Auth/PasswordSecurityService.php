@@ -3,7 +3,6 @@
 namespace App\Services\Auth;
 
 use App\Mail\PasswordResetLinkMail;
-use App\Models\AuditLog;
 use App\Models\PasswordResetToken;
 use App\Models\User;
 use App\Services\Audit\AuditLoggerService;
@@ -15,6 +14,10 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * Service governing password policy enforcement, cryptographically secure
+ * temporary password generation, and self-service password reset tokens.
+ */
 class PasswordSecurityService
 {
     public function __construct(
@@ -24,6 +27,8 @@ class PasswordSecurityService
 
     /**
      * Generate a cryptographically secure temporary password satisfying password policy.
+     *
+     * @return string
      */
     public function generateTemporaryPassword(): string
     {
@@ -50,6 +55,10 @@ class PasswordSecurityService
     /**
      * Authoritative backend validation of password policy:
      * Minimum 8 characters, at least 1 uppercase, 1 lowercase, 1 digit, 1 special character.
+     *
+     * @param string $password
+     * @return void
+     * @throws HttpException
      */
     public function enforcePasswordPolicy(string $password): void
     {
@@ -73,6 +82,10 @@ class PasswordSecurityService
     /**
      * Request a self-service password reset.
      * Guaranteed enumeration-safe: public response does not leak existence or reset-restricted state.
+     *
+     * @param string $identifier
+     * @param string|null $ip
+     * @return array<string, string>
      */
     public function requestSelfServiceReset(string $identifier, ?string $ip = null): array
     {
@@ -120,6 +133,12 @@ class PasswordSecurityService
     /**
      * Redeem a self-service password reset token.
      * Transactional single-use token redemption with row locking.
+     *
+     * @param string $rawToken
+     * @param string $newPassword
+     * @param string|null $ip
+     * @return User
+     * @throws HttpException
      */
     public function redeemResetToken(string $rawToken, string $newPassword, ?string $ip = null): User
     {
