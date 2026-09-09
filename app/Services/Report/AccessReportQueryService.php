@@ -42,44 +42,32 @@ class AccessReportQueryService
             $query->where('status', strtoupper($get('status')));
         }
 
-        if ($has('role_id')) {
-            $roleId = (int) $get('role_id');
-            $query->whereHas('roles', fn ($q) => $q->where('project_roles.id', $roleId));
+        if ($has('role_id') || $has('role_code')) {
+            $query->whereHas('roles', function ($q) use ($has, $get) {
+                if ($has('role_id')) {
+                    $q->where('project_roles.id', (int) $get('role_id'));
+                }
+                if ($has('role_code')) {
+                    $q->where('project_roles.code', $get('role_code'));
+                }
+            });
         }
 
-        if ($has('role_code')) {
-            $roleCode = $get('role_code');
-            $query->whereHas('roles', fn ($q) => $q->where('project_roles.code', $roleCode));
-        }
+        $orgFilters = array_filter([
+            'department_code' => $has('department_code') ? $get('department_code') : null,
+            'designation_code' => $has('designation_code') ? $get('designation_code') : null,
+            'province_code' => $has('province_code') ? $get('province_code') : null,
+            'zonal_code' => $has('zonal_code') ? $get('zonal_code') : null,
+            'region_code' => $has('region_code') ? $get('region_code') : null,
+            'branch_code' => $has('branch_code') ? $get('branch_code') : null,
+        ]);
 
-        if ($has('department_code')) {
-            $dep = $get('department_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('department_code', $dep));
-        }
-
-        if ($has('designation_code')) {
-            $des = $get('designation_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('designation_code', $des));
-        }
-
-        if ($has('province_code')) {
-            $prov = $get('province_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('province_code', $prov));
-        }
-
-        if ($has('zonal_code')) {
-            $zone = $get('zonal_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('zonal_code', $zone));
-        }
-
-        if ($has('region_code')) {
-            $reg = $get('region_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('region_code', $reg));
-        }
-
-        if ($has('branch_code')) {
-            $branch = $get('branch_code');
-            $query->whereHas('user.employee', fn ($q) => $q->where('branch_code', $branch));
+        if (! empty($orgFilters)) {
+            $query->whereHas('user.employee', function ($q) use ($orgFilters) {
+                foreach ($orgFilters as $column => $value) {
+                    $q->where($column, $value);
+                }
+            });
         }
 
         if ($has('search')) {

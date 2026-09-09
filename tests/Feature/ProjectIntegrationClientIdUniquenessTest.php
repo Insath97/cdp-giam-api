@@ -289,10 +289,10 @@ class ProjectIntegrationClientIdUniquenessTest extends TestCase
             'country' => 'Sri Lanka',
             'phone_primary' => '+94771234567',
             'province_code' => 'WP',
-            'zonal_code' => 'COL',
-            'region_code' => 'WZ',
-            'department_code' => 'IT',
-            'designation_code' => 'SE',
+            'zonal_code' => 'Z01',
+            'region_code' => 'R01',
+            'department_code' => 'DEP01',
+            'designation_code' => 'DES01',
             'start_date' => '2026-01-01',
         ]);
 

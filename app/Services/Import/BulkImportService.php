@@ -125,9 +125,15 @@ class BulkImportService
         $failed = 0;
         $errors = [];
 
-        // Track codes within the batch to detect duplicates in the file
-        $seenEmployeeCodes = [];
-        $seenIdNumbers = [];
+        // Pre-load active uniqueness and canonical reference sets into memory to eliminate per-row SELECT queries
+        $existingEmployeeCodes = array_flip(Employee::withTrashed()->pluck('employee_code')->toArray());
+        $existingIdNumbers = array_flip(Employee::withTrashed()->whereNotNull('id_number')->pluck('id_number')->toArray());
+        $validDepartments = array_flip(\App\Models\OrgDepartment::pluck('code')->toArray());
+        $validDesignations = array_flip(\App\Models\OrgDesignation::pluck('code')->toArray());
+        $validProvinces = array_flip(\App\Models\OrgProvince::pluck('code')->toArray());
+        $validZones = array_flip(\App\Models\OrgZone::pluck('code')->toArray());
+        $validRegions = array_flip(\App\Models\OrgRegion::pluck('code')->toArray());
+        $validBranches = array_flip(\App\Models\OrgBranch::pluck('code')->toArray());
 
         while (($row = fgetcsv($handle)) !== false) {
             $rowIndex++;
@@ -148,7 +154,7 @@ class BulkImportService
 
             $data = array_combine($header, array_map('trim', $row));
 
-            // In-batch duplicate checks
+            // In-batch and database uniqueness checks in memory
             if (isset($seenEmployeeCodes[$data['employee_code']])) {
                 $failed++;
                 $errors[] = [
@@ -160,6 +166,17 @@ class BulkImportService
                 continue;
             }
             $seenEmployeeCodes[$data['employee_code']] = true;
+
+            if (isset($existingEmployeeCodes[$data['employee_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The employee code '{$data['employee_code']}' has already been taken.",
+                    'errors' => ["The employee code '{$data['employee_code']}' has already been taken."],
+                ];
+                continue;
+            }
 
             if (! empty($data['id_number'])) {
                 if (isset($seenIdNumbers[$data['id_number']])) {
@@ -173,17 +190,95 @@ class BulkImportService
                     continue;
                 }
                 $seenIdNumbers[$data['id_number']] = true;
+
+                if (isset($existingIdNumbers[$data['id_number']])) {
+                    $failed++;
+                    $errors[] = [
+                        'row' => $rowIndex,
+                        'employee_code' => $data['employee_code'] ?? null,
+                        'reason' => "The id number '{$data['id_number']}' has already been taken.",
+                        'errors' => ["The id number '{$data['id_number']}' has already been taken."],
+                    ];
+                    continue;
+                }
+            }
+
+            // In-memory canonical organizational reference checks (matching StoreEmployeeRequest)
+            if (! isset($validDepartments[$data['department_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected department code '{$data['department_code']}' is invalid.",
+                    'errors' => ["The selected department code '{$data['department_code']}' is invalid."],
+                ];
+                continue;
+            }
+
+            if (! isset($validDesignations[$data['designation_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected designation code '{$data['designation_code']}' is invalid.",
+                    'errors' => ["The selected designation code '{$data['designation_code']}' is invalid."],
+                ];
+                continue;
+            }
+
+            if (! isset($validProvinces[$data['province_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected province code '{$data['province_code']}' is invalid.",
+                    'errors' => ["The selected province code '{$data['province_code']}' is invalid."],
+                ];
+                continue;
+            }
+
+            if (! isset($validZones[$data['zonal_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected zonal code '{$data['zonal_code']}' is invalid.",
+                    'errors' => ["The selected zonal code '{$data['zonal_code']}' is invalid."],
+                ];
+                continue;
+            }
+
+            if (! isset($validRegions[$data['region_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected region code '{$data['region_code']}' is invalid.",
+                    'errors' => ["The selected region code '{$data['region_code']}' is invalid."],
+                ];
+                continue;
+            }
+
+            if (! empty($data['branch_code']) && ! isset($validBranches[$data['branch_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'reason' => "The selected branch code '{$data['branch_code']}' is invalid.",
+                    'errors' => ["The selected branch code '{$data['branch_code']}' is invalid."],
+                ];
+                continue;
             }
 
             $validator = Validator::make($data, [
-                'employee_code' => ['required', 'string', 'max:50', 'unique:employees,employee_code'],
+                'employee_code' => ['required', 'string', 'max:50'],
                 'f_name' => ['required', 'string', 'max:100'],
                 'l_name' => ['required', 'string', 'max:100'],
                 'full_name' => ['required', 'string', 'max:255'],
                 'name_with_initials' => ['required', 'string', 'max:150'],
                 'employee_type' => ['required', Rule::in(['permanent', 'contract', 'probation', 'intern', 'part_time'])],
                 'id_type' => ['required', Rule::in(['nic', 'passport', 'driving_license'])],
-                'id_number' => ['required', 'string', 'max:50', 'unique:employees,id_number'],
+                'id_number' => ['required', 'string', 'max:50'],
                 'date_of_birth' => ['required', 'date'],
                 'email' => ['required', 'email', 'max:255'],
                 'phone' => ['required', 'string', 'max:30'],
@@ -238,6 +333,14 @@ class BulkImportService
                         'is_active' => true,
                     ]);
                 });
+
+                $seenEmployeeCodes[$data['employee_code']] = true;
+                $existingEmployeeCodes[$data['employee_code']] = true;
+                if (! empty($data['id_number'])) {
+                    $seenIdNumbers[$data['id_number']] = true;
+                    $existingIdNumbers[$data['id_number']] = true;
+                }
+
                 $successful++;
             } catch (\Exception $e) {
                 $failed++;
@@ -327,6 +430,13 @@ class BulkImportService
         $seenEmployeeCodes = [];
         $seenEmails = [];
 
+        // Pre-load existing records into memory to avoid N*5 queries per CSV row
+        $existingEmployeeCodes = array_flip(Employee::pluck('employee_code')->all());
+        $existingUserEmployeeCodes = array_flip(User::whereNotNull('employee_code')->pluck('employee_code')->all());
+        $existingUsernames = array_flip(User::pluck('username')->all());
+        $existingEmails = array_flip(User::pluck('email')->all());
+        $rolesByName = Role::where('guard_name', 'web')->with('permissions')->get()->keyBy('name');
+
         while (($row = fgetcsv($handle)) !== false) {
             $rowIndex++;
             if (empty(array_filter($row))) {
@@ -381,21 +491,79 @@ class BulkImportService
                 ];
                 continue;
             }
+
             $seenUsernames[$data['username']] = true;
             $seenEmployeeCodes[$data['employee_code']] = true;
             $seenEmails[$data['email']] = true;
 
+            // In-memory database uniqueness and existence checks
+            if (! isset($existingEmployeeCodes[$data['employee_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'reason' => 'The selected employee code is invalid.',
+                    'errors' => ['The selected employee code is invalid.'],
+                ];
+                continue;
+            }
+            if (isset($existingUserEmployeeCodes[$data['employee_code']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'reason' => 'The employee code has already been taken.',
+                    'errors' => ['The employee code has already been taken.'],
+                ];
+                continue;
+            }
+            if (isset($existingUsernames[$data['username']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'reason' => 'The username has already been taken.',
+                    'errors' => ['The username has already been taken.'],
+                ];
+                continue;
+            }
+            if (isset($existingEmails[$data['email']])) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'reason' => 'The email has already been taken.',
+                    'errors' => ['The email has already been taken.'],
+                ];
+                continue;
+            }
+
+            $roleName = ! empty($data['role']) ? $data['role'] : 'Staff';
+            if (! $rolesByName->has($roleName)) {
+                $failed++;
+                $errors[] = [
+                    'row' => $rowIndex,
+                    'employee_code' => $data['employee_code'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'reason' => 'Selected role must be an existing GIAM internal role.',
+                    'errors' => ['Selected role must be an existing GIAM internal role.'],
+                ];
+                continue;
+            }
+
             $validator = Validator::make($data, [
-                'employee_code' => ['required', 'string', 'exists:employees,employee_code', 'unique:users,employee_code'],
-                'username' => ['required', 'string', 'max:100', 'unique:users,username'],
+                'employee_code' => ['required', 'string'],
+                'username' => ['required', 'string', 'max:100'],
                 'name' => ['required', 'string', 'max:255'],
-                'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+                'email' => ['required', 'email', 'max:255'],
                 'user_type' => ['nullable', Rule::in(['staff', 'admin', 'system'])],
                 'is_active' => ['nullable'],
                 'can_login' => ['nullable'],
-                'role' => ['nullable', 'string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
-            ], [
-                'role.exists' => 'Selected role must be an existing GIAM internal role.',
+                'role' => ['nullable', 'string'],
             ]);
 
             if ($validator->fails()) {
@@ -412,13 +580,8 @@ class BulkImportService
             }
 
             try {
-                $roleName = ! empty($data['role']) ? $data['role'] : 'Staff';
-
                 // Privilege escalation validation for role assignment
-                $targetRole = Role::where('name', $roleName)->where('guard_name', 'web')->with('permissions')->first();
-                if (! $targetRole) {
-                    throw new \RuntimeException("The selected GIAM internal role [{$roleName}] is invalid or does not exist.");
-                }
+                $targetRole = $rolesByName->get($roleName);
                 $this->grantAuthorityService->validateRoleAssignment($actor, collect([$targetRole]));
 
                 $rawPassword = Str::random(16) . '@A1';
@@ -454,6 +617,13 @@ class BulkImportService
 
                 // Trigger safe email if configured (no plaintext password logged)
                 $this->userCreationService->sendNewAccountEmailSafeExternal($createdUser, $rawPassword);
+
+                $seenUsernames[$data['username']] = true;
+                $existingUsernames[$data['username']] = true;
+                $seenEmployeeCodes[$data['employee_code']] = true;
+                $existingUserEmployeeCodes[$data['employee_code']] = true;
+                $seenEmails[$data['email']] = true;
+                $existingEmails[$data['email']] = true;
 
                 $successful++;
             } catch (\Exception $e) {

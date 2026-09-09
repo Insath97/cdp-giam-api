@@ -50,29 +50,31 @@ class CsvReportGenerator
                 'Assigned At',
             ]);
 
-            // Stream rows via database cursor
-            foreach ($query->cursor() as $access) {
-                $user = $access->user;
-                $employee = $user?->employee;
-                $project = $access->project;
+            // Stream rows via buffered chunks to preserve eager-loaded relationships with O(1) memory
+            $query->chunk(250, function ($chunk) use ($handle) {
+                foreach ($chunk as $access) {
+                    $user = $access->user;
+                    $employee = $user?->employee;
+                    $project = $access->project;
 
-                fputcsv($handle, [
-                    $employee?->employee_code ?? $user?->employee_code ?? 'N/A',
-                    $employee?->full_name ?? $user?->name ?? 'N/A',
-                    $user?->username ?? 'N/A',
-                    $user?->email ?? 'N/A',
-                    $employee?->department?->name ?? $employee?->department_code ?? 'N/A',
-                    $employee?->designation?->name ?? $employee?->designation_code ?? 'N/A',
-                    $employee?->province?->name ?? $employee?->province_code ?? 'N/A',
-                    $employee?->branch?->name ?? $employee?->branch_code ?? 'N/A',
-                    $project?->code ?? 'N/A',
-                    $project?->name ?? 'N/A',
-                    $access->status,
-                    $access->roles->pluck('name')->implode(', '),
-                    $access->permissions->pluck('name')->implode(', '),
-                    $access->created_at?->toDateTimeString() ?? 'N/A',
-                ]);
-            }
+                    fputcsv($handle, [
+                        $employee?->employee_code ?? $user?->employee_code ?? 'N/A',
+                        $employee?->full_name ?? $user?->name ?? 'N/A',
+                        $user?->username ?? 'N/A',
+                        $user?->email ?? 'N/A',
+                        $employee?->department?->name ?? $employee?->department_code ?? 'N/A',
+                        $employee?->designation?->name ?? $employee?->designation_code ?? 'N/A',
+                        $employee?->province?->name ?? $employee?->province_code ?? 'N/A',
+                        $employee?->branch?->name ?? $employee?->branch_code ?? 'N/A',
+                        $project?->code ?? 'N/A',
+                        $project?->name ?? 'N/A',
+                        $access->status,
+                        $access->roles->pluck('name')->implode(', '),
+                        $access->permissions->pluck('name')->implode(', '),
+                        $access->created_at?->toDateTimeString() ?? 'N/A',
+                    ]);
+                }
+            });
 
             fclose($handle);
         }, 200, $headers);
@@ -108,20 +110,22 @@ class CsvReportGenerator
                 'Request ID',
             ]);
 
-            foreach ($query->cursor() as $log) {
-                fputcsv($handle, [
-                    $log->id,
-                    $log->created_at?->toDateTimeString(),
-                    $log->actor?->username ?? 'SYSTEM',
-                    $log->action,
-                    $log->entity_type,
-                    $log->entity_id,
-                    $log->project?->code ?? 'N/A',
-                    $log->status,
-                    $log->ip_address,
-                    $log->request_id,
-                ]);
-            }
+            $query->chunk(250, function ($chunk) use ($handle) {
+                foreach ($chunk as $log) {
+                    fputcsv($handle, [
+                        $log->id,
+                        $log->created_at?->toDateTimeString(),
+                        $log->actor?->username ?? 'SYSTEM',
+                        $log->action,
+                        $log->entity_type,
+                        $log->entity_id,
+                        $log->project?->code ?? 'N/A',
+                        $log->status,
+                        $log->ip_address,
+                        $log->request_id,
+                    ]);
+                }
+            });
 
             fclose($handle);
         }, 200, $headers);

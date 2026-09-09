@@ -29,6 +29,7 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(\Database\Seeders\OrgStructureSeeder::class);
 
         // 1. Create essential GIAM permissions
         $permissions = [
@@ -74,8 +75,8 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
             'zonal_code' => 'Z01',
             'region_code' => 'R01',
             'branch_code' => 'BR01',
-            'department_code' => 'IT',
-            'designation_code' => 'SYSADMIN',
+            'department_code' => 'DEP03',
+            'designation_code' => 'DES06',
         ]);
 
         $this->hrEmp = Employee::create([
@@ -100,8 +101,8 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
             'zonal_code' => 'Z01',
             'region_code' => 'R01',
             'branch_code' => 'BR01',
-            'department_code' => 'HR',
-            'designation_code' => 'HR_EXEC',
+            'department_code' => 'DEP01',
+            'designation_code' => 'DES02',
         ]);
 
         $this->staffEmp = Employee::create([
@@ -126,8 +127,8 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
             'zonal_code' => 'Z01',
             'region_code' => 'R01',
             'branch_code' => 'BR01',
-            'department_code' => 'OPS',
-            'designation_code' => 'OPS_CLERK',
+            'department_code' => 'DEP02',
+            'designation_code' => 'DES04',
         ]);
 
         // 4. Linked Principals
@@ -220,7 +221,7 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
             'EMP9090', 'Kamal', 'Perera', 'Kamal Perera', 'K. Perera', 'permanent',
             'nic', '901112223V', '1990-03-10', 'kamal.perera@example.com', '+94779090001',
             'Main St', 'Colombo', 'Sri Lanka', '+94779090001', 'WP', 'Z01', 'R01',
-            'IT', 'DEV', '2026-01-01'
+            'DEP03', 'DES06', '2026-01-01'
         ];
         $csvContent = implode(',', $headers) . "\n" . implode(',', $row) . "\n";
 
@@ -273,8 +274,8 @@ class Step9MultiProjectAndBulkImportTest extends TestCase
             'zonal_code' => 'Z01',
             'region_code' => 'R01',
             'branch_code' => 'BR01',
-            'department_code' => 'FIN',
-            'designation_code' => 'ACCOUNTANT',
+            'department_code' => 'DEP04',
+            'designation_code' => 'DES07',
         ]);
 
         $csvContent = "employee_code,username,name,email,user_type,is_active,can_login,role\n" .

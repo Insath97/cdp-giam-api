@@ -176,6 +176,7 @@ class ProjectAccessAssignmentService
                 $existing->revoked_by = null;
                 $existing->revoked_at = null;
                 $existing->revocation_reason = null;
+                $existing->setExpectedVersion($expectedVersion);
                 $existing->save();
 
                 $access = $existing;
@@ -293,6 +294,7 @@ class ProjectAccessAssignmentService
             $access->revoked_by = $actor->id;
             $access->revoked_at = now();
             $access->revocation_reason = $reason;
+            $access->setExpectedVersion($expectedVersion);
             $access->save();
 
             // Transactional outbox sync_jobs record for downstream de-provisioning
