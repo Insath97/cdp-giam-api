@@ -167,5 +167,97 @@ class ProjectRegistrySeeder extends Seeder
                 'status' => 'healthy',
             ]
         );
+
+        // 4. STOCKLY Project (External Inventory Application - Resource API Consumer)
+        $stocklyBaseUrl = (string) (config('services.stockly.base_url') ?? '');
+        $stocklyApiUrl = (string) (config('services.stockly.api_url') ?? '');
+
+        $stockly = Project::updateOrCreate(
+            ['code' => 'stockly'],
+            [
+                'name' => 'Stockly',
+                'description' => 'Stockly Inventory and Supply Chain Management System',
+                'base_url' => $stocklyBaseUrl,
+                'icon_url' => '/icons/stockly.svg',
+                'status' => 'active',
+            ]
+        );
+
+        ProjectIntegration::updateOrCreate(
+            ['project_id' => $stockly->id],
+            [
+                'api_base_url' => $stocklyApiUrl,
+                'auth_method' => 'api_key',
+                'client_id' => null,
+                'allowed_user_fields' => [
+                    'employee_code',
+                    'full_name',
+                    'email',
+                    'department_code',
+                    'designation_code',
+                    'branch_code',
+                ],
+                'allowed_resources' => [
+                    'employees:read',
+                    'departments:read',
+                    'designations:read',
+                    'branches:read',
+                    'regions:read',
+                    'zones:read',
+                    'provinces:read',
+                ],
+                'allowed_resource_fields' => [
+                    'employees' => [
+                        'employee_code',
+                        'full_name',
+                        'email',
+                        'department_code',
+                        'designation_code',
+                        'branch_code',
+                        'region_code',
+                        'zonal_code',
+                        'province_code',
+                        'department',
+                        'designation',
+                        'branch',
+                        'region',
+                        'zone',
+                        'province',
+                    ],
+                    'departments' => [
+                        'code',
+                        'name',
+                    ],
+                    'designations' => [
+                        'code',
+                        'name',
+                        'department_code',
+                    ],
+                    'branches' => [
+                        'code',
+                        'name',
+                        'city',
+                        'region_code',
+                    ],
+                    'regions' => [
+                        'code',
+                        'name',
+                        'zonal_code',
+                    ],
+                    'zones' => [
+                        'code',
+                        'name',
+                        'province_code',
+                    ],
+                    'provinces' => [
+                        'code',
+                        'name',
+                    ],
+                ],
+                'sync_enabled' => false,
+                'sso_enabled' => false,
+                'status' => 'healthy',
+            ]
+        );
     }
 }

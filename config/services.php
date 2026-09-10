@@ -50,4 +50,13 @@ return [
         'client_secret' => env('PAYROLL_CLIENT_SECRET'),
     ],
 
+    'stockly' => [
+        'base_url' => env('STOCKLY_BASE_URL', ''),
+        'api_url' => env('STOCKLY_API_BASE_URL', ''),
+    ],
+
+    'project_api_keys' => [
+        'pepper' => env('GIAM_API_KEY_PEPPER', env('APP_KEY')),
+    ],
+
 ];

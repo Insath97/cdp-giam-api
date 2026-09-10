@@ -40,7 +40,7 @@ class UpdateProjectIntegrationRequest extends FormRequest
             'client_id' => ['nullable', 'string', 'max:100', $clientIdRule],
             'client_secret' => ['nullable', 'string'],
             'allowed_user_fields' => ['sometimes', 'required', 'array'],
-            'allowed_user_fields.*' => ['string', Rule::in(StoreProjectRequest::VALID_PROJECTION_FIELDS)],
+            'allowed_user_fields.*' => ['string', Rule::in(\App\Models\ProjectIntegration::VALID_PROJECTION_FIELDS)],
             'sync_enabled' => ['sometimes', 'boolean'],
             'sso_enabled' => ['sometimes', 'boolean'],
         ];

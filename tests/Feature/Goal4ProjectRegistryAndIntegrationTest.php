@@ -77,52 +77,53 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
     }
 
     /**
-     * Test 1: Project CRUD and role-based permissions.
+     * Test 1: Project management and role-based permissions (POST project creation is removed).
      */
     public function test_project_crud_and_role_permissions(): void
     {
-        // 1. Staff user is blocked from viewing and managing projects (HTTP 403)
+        // 1. Staff user is blocked from viewing projects (HTTP 403)
         $this->actingAs($this->staffUser, 'web');
         $staffIndex = $this->getJson('/api/v1/projects');
         $staffIndex->assertStatus(403);
 
+        // 2. Arbitrary project creation via POST /api/v1/projects is completely disallowed (Method Not Allowed 405)
         $staffStore = $this->postJson('/api/v1/projects', [
             'code' => 'dm',
             'name' => 'Distribution Management',
             'base_url' => 'http://localhost:8004',
         ]);
-        $staffStore->assertStatus(403);
+        $staffStore->assertStatus(405);
 
-        // 2. Super Admin can register a new project with integration settings
+        // 3. Super Admin is also blocked from creating projects via POST (endpoint removed per architecture)
         $this->actingAs($this->superAdmin, 'web');
         $adminStore = $this->postJson('/api/v1/projects', [
+            'code' => 'dm',
+            'name' => 'Distribution Management',
+            'base_url' => 'http://localhost:8004',
+        ]);
+        $adminStore->assertStatus(405);
+
+        // 4. Onboard existing application through backend reference/model data
+        $dm = Project::create([
             'code' => 'dm',
             'name' => 'Distribution Management',
             'description' => 'Delivery and wholesale route management portal',
             'base_url' => 'http://localhost:8004',
             'icon_url' => '/icons/dm.svg',
             'status' => 'active',
-            'integration' => [
-                'api_base_url' => 'http://localhost:8004/api/giam/integration',
-                'auth_method' => 'bearer_token',
-                'client_id' => 'giam_dm_client',
-                'client_secret' => 'super_secret_dm_key_999',
-                'allowed_user_fields' => ['employee_code', 'full_name', 'email', 'phone_primary', 'department_code'],
-            ],
         ]);
-
-        $adminStore->assertStatus(201)
-            ->assertJson([
-                'data' => [
-                    'code' => 'dm',
-                    'name' => 'Distribution Management',
-                ],
-            ]);
+        $dm->integration()->create([
+            'api_base_url' => 'http://localhost:8004/api/giam/integration',
+            'auth_method' => 'bearer_token',
+            'client_id' => 'giam_dm_client',
+            'allowed_user_fields' => ['employee_code', 'full_name', 'email', 'phone_primary', 'department_code'],
+            'status' => 'healthy',
+        ]);
 
         $this->assertDatabaseHas('projects', ['code' => 'dm']);
         $this->assertDatabaseHas('project_integrations', ['client_id' => 'giam_dm_client']);
 
-        // 3. Update project metadata
+        // 5. Update project metadata
         $updateResp = $this->putJson('/api/v1/projects/dm', [
             'name' => 'Distribution & Fleet Portal',
         ]);
@@ -133,7 +134,7 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
                 ],
             ]);
 
-        // 4. Disable project
+        // 6. Disable project
         $deleteResp = $this->deleteJson('/api/v1/projects/dm');
         $deleteResp->assertStatus(200);
         $this->assertDatabaseHas('projects', ['code' => 'dm', 'status' => 'disabled']);
@@ -154,13 +155,11 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
         $indexContent = $indexResp->getContent();
         $this->assertStringNotContainsString('test_hrms_secret', $indexContent);
 
-
         // 2. Fetch via project show
         $showResp = $this->getJson("/api/v1/projects/{$hrms->id}");
         $showResp->assertStatus(200);
         $showContent = $showResp->getContent();
         $this->assertStringNotContainsString('test_hrms_secret', $showContent);
-
 
         // 3. Fetch via integration show
         $integrationResp = $this->getJson("/api/v1/projects/{$hrms->id}/integration");
@@ -173,12 +172,10 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
         $integrationContent = $integrationResp->getContent();
         $this->assertStringNotContainsString('test_hrms_secret', $integrationContent);
 
-
         // 4. Verify in database that it is encrypted, not plaintext
         $rawInDb = ProjectIntegration::where('project_id', $hrms->id)->value('encrypted_client_secret');
         $this->assertNotEquals('test_hrms_secret', $rawInDb);
         $this->assertEquals('test_hrms_secret', $hrms->integration->getDecryptedClientSecret());
-
     }
 
     /**
@@ -188,21 +185,17 @@ class Goal4ProjectRegistryAndIntegrationTest extends TestCase
     {
         $this->actingAs($this->superAdmin, 'web');
 
-        // Attempt to configure forbidden fields (e.g. password, salary, fake_field)
-        $response = $this->postJson('/api/v1/projects', [
-            'code' => 'finance_portal',
-            'name' => 'Finance Portal',
-            'base_url' => 'http://localhost:8005',
-            'integration' => [
-                'api_base_url' => 'http://localhost:8005/api/giam/integration',
-                'allowed_user_fields' => ['employee_code', 'salary', 'password_hash'], // FORBIDDEN!
-            ],
+        $hrms = Project::where('code', 'hrms')->firstOrFail();
+
+        // Attempt to configure forbidden fields (e.g. password, salary, fake_field) on integration update
+        $response = $this->putJson("/api/v1/projects/{$hrms->id}/integration", [
+            'allowed_user_fields' => ['employee_code', 'salary', 'password_hash'], // FORBIDDEN!
         ]);
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors([
-                'integration.allowed_user_fields.1',
-                'integration.allowed_user_fields.2',
+                'allowed_user_fields.1',
+                'allowed_user_fields.2',
             ]);
     }
 

@@ -6,8 +6,10 @@ use App\Http\Controllers\Api\BulkImportController;
 use App\Http\Controllers\Api\DraftController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\GiamRbacController;
+use App\Http\Controllers\Api\Integrations\ProjectResourceController;
 use App\Http\Controllers\Api\PasswordResetAssistanceAdminController;
 use App\Http\Controllers\Api\ProjectAccessRequestController;
+use App\Http\Controllers\Api\ProjectApiKeyAdminController;
 use App\Http\Controllers\Api\ProjectCatalogController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
@@ -109,10 +111,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/reject', [ProjectAccessRequestController::class, 'reject'])->middleware(['giam.permission:ACCESS_ASSIGN', 'throttle:sensitive-writes']);
         });
 
-        // Projects Registry & Integrations
+        // Projects Registry & Integrations (Read, Status & Health/Sync Operations)
         Route::prefix('projects')->group(function () {
             Route::get('/', [ProjectController::class, 'index'])->middleware('giam.permission:PROJECT_VIEW');
-            Route::post('/', [ProjectController::class, 'store'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:sensitive-writes']);
             Route::get('/{id}', [ProjectController::class, 'show'])->middleware('giam.permission:PROJECT_VIEW');
             Route::put('/{id}', [ProjectController::class, 'update'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:sensitive-writes']);
             Route::delete('/{id}', [ProjectController::class, 'destroy'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:sensitive-writes']);
@@ -125,6 +126,11 @@ Route::prefix('v1')->group(function () {
             // RBAC Catalog Discovery & Display
             Route::get('/{id}/catalog', [ProjectCatalogController::class, 'show'])->middleware('giam.permission:PROJECT_VIEW');
             Route::post('/{id}/sync-catalog', [ProjectCatalogController::class, 'sync'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:catalog-sync']);
+
+            // Project Inbound API Keys Management
+            Route::get('/{id}/api-keys', [ProjectApiKeyAdminController::class, 'index'])->middleware('giam.permission:PROJECT_MANAGE');
+            Route::post('/{id}/api-keys', [ProjectApiKeyAdminController::class, 'store'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:sensitive-writes']);
+            Route::post('/{id}/api-keys/{keyId}/revoke', [ProjectApiKeyAdminController::class, 'revoke'])->middleware(['giam.permission:PROJECT_MANAGE', 'throttle:sensitive-writes']);
         });
 
         // Outbox Sync Jobs & Manual Retry
@@ -178,5 +184,33 @@ Route::prefix('v1')->group(function () {
             Route::put('/permissions/{id}', [GiamRbacController::class, 'updatePermission'])->middleware('giam.permission:GIAM_ROLE_MANAGE');
             Route::delete('/permissions/{id}', [GiamRbacController::class, 'destroyPermission'])->middleware('giam.permission:GIAM_ROLE_MANAGE');
         });
+    });
+
+    // Inbound Project Resource APIs (Authenticated via X-API-KEY)
+    Route::prefix('integrations/resources')->middleware(['project.api_key', 'throttle:project-resource-api'])->group(function () {
+        // Employee master resources
+        Route::middleware('project.resource:employees:read')->group(function () {
+            Route::get('/employees', [ProjectResourceController::class, 'employees']);
+            Route::get('/employees/{employeeCode}', [ProjectResourceController::class, 'showEmployee']);
+        });
+
+        // Organizational reference resources
+        Route::get('/departments', [ProjectResourceController::class, 'departments'])
+            ->middleware('project.resource:departments:read');
+
+        Route::get('/designations', [ProjectResourceController::class, 'designations'])
+            ->middleware('project.resource:designations:read');
+
+        Route::get('/branches', [ProjectResourceController::class, 'branches'])
+            ->middleware('project.resource:branches:read');
+
+        Route::get('/regions', [ProjectResourceController::class, 'regions'])
+            ->middleware('project.resource:regions:read');
+
+        Route::get('/zones', [ProjectResourceController::class, 'zones'])
+            ->middleware('project.resource:zones:read');
+
+        Route::get('/provinces', [ProjectResourceController::class, 'provinces'])
+            ->middleware('project.resource:provinces:read');
     });
 });

@@ -175,27 +175,18 @@ class ProjectIntegrationClientIdUniquenessTest extends TestCase
     }
 
     /**
-     * Test 5b: StoreProjectRequest rejects duplicate client_id on project registration.
+     * Test 5b: General POST project creation endpoint is removed from API (405 Method Not Allowed).
      */
-    public function test_store_project_request_rejects_duplicate_client_id(): void
+    public function test_post_project_creation_endpoint_is_removed(): void
     {
-        $hrms = Project::where('code', 'hrms')->firstOrFail();
-        $hrmsClientId = $hrms->integration->client_id;
-
         $response = $this->actingAs($this->adminUser)
             ->postJson('/api/v1/projects', [
                 'code' => 'new_conflicting_project',
                 'name' => 'Conflicting Project',
                 'base_url' => 'http://conflict.internal',
-                'integration' => [
-                    'api_base_url' => 'http://conflict.internal/api',
-                    'client_id' => $hrmsClientId,
-                    'allowed_user_fields' => ['email'],
-                ],
             ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['integration.client_id']);
+        $response->assertStatus(405);
     }
 
     /**

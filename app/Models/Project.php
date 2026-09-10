@@ -96,4 +96,12 @@ class Project extends Model
     {
         return $this->hasMany(AuditLog::class, 'project_id');
     }
+
+    /**
+     * Get the inbound API keys associated with this project.
+     */
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(ProjectApiKey::class, 'project_id');
+    }
 }

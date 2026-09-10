@@ -12,6 +12,34 @@ class ProjectIntegration extends Model
     use HasFactory;
 
     /**
+     * Permitted projection fields for external project integrations.
+     */
+    public const VALID_PROJECTION_FIELDS = [
+        'employee_code',
+        'f_name',
+        'l_name',
+        'full_name',
+        'name_with_initials',
+        'id_type',
+        'id_number',
+        'date_of_birth',
+        'email',
+        'phone',
+        'phone_primary',
+        'phone_secondary',
+        'address_line_1',
+        'city',
+        'state',
+        'country',
+        'postal_code',
+        'department_code',
+        'designation_code',
+        'reporting_manager_code',
+        'start_date',
+        'end_date',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -25,6 +53,8 @@ class ProjectIntegration extends Model
         'encrypted_client_secret',
         'redirect_uris',
         'allowed_user_fields',
+        'allowed_resources',
+        'allowed_resource_fields',
         'sync_enabled',
         'sso_enabled',
         'status',
@@ -52,6 +82,8 @@ class ProjectIntegration extends Model
         return [
             'redirect_uris' => 'array',
             'allowed_user_fields' => 'array',
+            'allowed_resources' => 'array',
+            'allowed_resource_fields' => 'array',
             'sync_enabled' => 'boolean',
             'sso_enabled' => 'boolean',
             'last_health_check_at' => 'datetime',

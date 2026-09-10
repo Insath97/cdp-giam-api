@@ -62,5 +62,14 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(120)->by($request->user()?->id ?? $request->ip());
         });
+
+        // H. Inbound Project Resource API limiter
+        RateLimiter::for('project-resource-api', function (Request $request) {
+            $project = $request->attributes->get('authenticated_project');
+            $apiKey = $request->attributes->get('authenticated_api_key');
+            $identifier = $project ? 'proj_' . $project->id . '_key_' . ($apiKey?->id ?? 'unknown') : $request->ip();
+            $perMinute = (int) env('PROJECT_RESOURCE_RATE_LIMIT_PER_MINUTE', 120);
+            return Limit::perMinute($perMinute)->by($identifier);
+        });
     }
 }

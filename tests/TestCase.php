@@ -21,5 +21,7 @@ abstract class TestCase extends BaseTestCase
         Config::set('services.payroll.api_url', 'http://localhost:8003/api/giam/integration');
         Config::set('services.payroll.client_id', 'test_payroll_client');
         Config::set('services.payroll.client_secret', 'test_payroll_secret');
+        Config::set('services.stockly.base_url', '');
+        Config::set('services.stockly.api_url', '');
     }
 }

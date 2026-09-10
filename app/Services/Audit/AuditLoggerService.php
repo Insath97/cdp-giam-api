@@ -27,6 +27,10 @@ class AuditLoggerService
         'remember_token',
         'token',
         'authorization',
+        'api_key',
+        'plain_text_key',
+        'key_hash',
+        'x-api-key',
     ];
 
     /**
