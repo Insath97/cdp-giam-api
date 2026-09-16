@@ -865,5 +865,209 @@ class ProjectResourceApiTest extends TestCase
         $this->assertArrayHasKey('code', $provinceItem);
         $this->assertArrayHasKey('name', $provinceItem);
     }
+
+    public function test_credix_is_onboarded_with_correct_scopes_and_canonical_fields(): void
+    {
+        $credix = Project::where('code', 'credix')->first();
+
+        $this->assertNotNull($credix);
+        $this->assertEquals('CrediX', $credix->name);
+        $this->assertEquals('active', $credix->status);
+
+        $integration = $credix->integration;
+        $this->assertNotNull($integration);
+        $this->assertEquals('api_key', $integration->auth_method);
+        $this->assertFalse($integration->sync_enabled);
+        $this->assertFalse($integration->sso_enabled);
+
+        // Allowed resources must contain only employees:read
+        $this->assertEquals(['employees:read'], $integration->allowed_resources);
+
+        // Allowed employee fields must be strictly the canonical contract fields
+        $allowedEmployeeFields = $integration->allowed_resource_fields['employees'] ?? [];
+        $this->assertEquals(
+            ['employee_code', 'full_name', 'id_type', 'id_number', 'phone_primary'],
+            $allowedEmployeeFields
+        );
+
+        // Assert sensitive PII and unapproved fields are absent
+        $this->assertNotContains('email', $allowedEmployeeFields);
+        $this->assertNotContains('date_of_birth', $allowedEmployeeFields);
+        $this->assertNotContains('address_line_1', $allowedEmployeeFields);
+        $this->assertNotContains('department_code', $allowedEmployeeFields);
+        $this->assertNotContains('salary', $allowedEmployeeFields);
+        $this->assertNotContains('bank_account', $allowedEmployeeFields);
+
+        // Assert non-canonical aliases are not in configuration
+        $this->assertNotContains('employee_name', $allowedEmployeeFields);
+        $this->assertNotContains('nic', $allowedEmployeeFields);
+        $this->assertNotContains('phone_number', $allowedEmployeeFields);
+    }
+
+    public function test_credix_can_consume_employee_resources_using_canonical_contract(): void
+    {
+        $credix = Project::where('code', 'credix')->first();
+
+        $keyResult = $this->apiKeyService->generateKey(
+            project: $credix,
+            name: 'CrediX Integration Test Key'
+        );
+        $credixKey = $keyResult['plain_text_key'];
+
+        // 1. Create synthetic test employee with id_type = nic
+        $empNic = Employee::create([
+            'employee_code' => 'EMP_CDX_001',
+            'f_name' => 'Alice',
+            'l_name' => 'Perera',
+            'full_name' => 'Alice Perera',
+            'name_with_initials' => 'A. Perera',
+            'employee_type' => 'permanent',
+            'id_type' => 'nic',
+            'id_number' => '958889999V',
+            'date_of_birth' => '1995-05-15',
+            'email' => 'alice.perera@example.com',
+            'phone' => '+94112345678',
+            'phone_primary' => '+94771122334',
+            'address_line_1' => '123 Main Road',
+            'city' => 'Colombo',
+            'province_code' => 'WP',
+            'zonal_code' => 'Z01',
+            'region_code' => 'R01',
+            'department_code' => 'DEP01',
+            'designation_code' => 'DES01',
+            'start_date' => '2026-01-01',
+            'is_active' => true,
+        ]);
+
+        // 2. Create synthetic test employee with id_type = passport
+        $empPassport = Employee::create([
+            'employee_code' => 'EMP_CDX_002',
+            'f_name' => 'Bob',
+            'l_name' => 'Foreigner',
+            'full_name' => 'Bob Foreigner',
+            'name_with_initials' => 'B. Foreigner',
+            'employee_type' => 'contract',
+            'id_type' => 'passport',
+            'id_number' => 'N9876543',
+            'date_of_birth' => '1990-08-20',
+            'email' => 'bob.foreigner@example.com',
+            'phone' => '+94119988776',
+            'phone_primary' => '+94770009988',
+            'address_line_1' => '456 Sea View',
+            'city' => 'Colombo',
+            'province_code' => 'WP',
+            'zonal_code' => 'Z01',
+            'region_code' => 'R01',
+            'department_code' => 'DEP01',
+            'designation_code' => 'DES01',
+            'start_date' => '2026-01-01',
+            'is_active' => true,
+        ]);
+
+        // --- Test 1: Single employee endpoint for employee with id_type = nic ---
+        $resp1 = $this->withHeaders(['X-API-KEY' => $credixKey])
+            ->getJson("/api/v1/integrations/resources/employees/{$empNic->employee_code}");
+
+        $resp1->assertStatus(200);
+        $data1 = $resp1->json('data');
+
+        // Verify response contains ONLY the five permitted canonical fields
+        $this->assertCount(5, $data1);
+        $this->assertArrayHasKey('employee_code', $data1);
+        $this->assertArrayHasKey('full_name', $data1);
+        $this->assertArrayHasKey('id_type', $data1);
+        $this->assertArrayHasKey('id_number', $data1);
+        $this->assertArrayHasKey('phone_primary', $data1);
+
+        // Verify canonical values
+        $this->assertEquals('EMP_CDX_001', $data1['employee_code']);
+        $this->assertEquals('Alice Perera', $data1['full_name']);
+        $this->assertEquals('nic', $data1['id_type']);
+        $this->assertEquals('958889999V', $data1['id_number']);
+        $this->assertEquals('+94771122334', $data1['phone_primary']);
+
+        // Verify non-canonical aliases do not exist in response
+        $this->assertArrayNotHasKey('employee_name', $data1);
+        $this->assertArrayNotHasKey('nic', $data1);
+        $this->assertArrayNotHasKey('phone_number', $data1);
+
+        // Verify unallowed fields are strictly excluded
+        $this->assertArrayNotHasKey('id', $data1);
+        $this->assertArrayNotHasKey('email', $data1);
+        $this->assertArrayNotHasKey('phone', $data1);
+        $this->assertArrayNotHasKey('date_of_birth', $data1);
+        $this->assertArrayNotHasKey('address_line_1', $data1);
+        $this->assertArrayNotHasKey('department_code', $data1);
+
+        // --- Test 2: Single employee endpoint for employee with id_type = passport ---
+        $resp2 = $this->withHeaders(['X-API-KEY' => $credixKey])
+            ->getJson("/api/v1/integrations/resources/employees/{$empPassport->employee_code}");
+
+        $resp2->assertStatus(200);
+        $data2 = $resp2->json('data');
+
+        $this->assertEquals('EMP_CDX_002', $data2['employee_code']);
+        $this->assertEquals('Bob Foreigner', $data2['full_name']);
+        $this->assertEquals('passport', $data2['id_type']);
+        $this->assertEquals('N9876543', $data2['id_number']);
+        $this->assertEquals('+94770009988', $data2['phone_primary']);
+
+        // Consumer correctly distinguishes that id_number is a passport because id_type is passport
+        $this->assertNotEquals('nic', $data2['id_type']);
+
+        // --- Test 3: Paginated collection endpoint follows exact same rules ---
+        $collResp = $this->withHeaders(['X-API-KEY' => $credixKey])
+            ->getJson('/api/v1/integrations/resources/employees?per_page=10');
+
+        $collResp->assertStatus(200);
+        $items = $collResp->json('data');
+        $this->assertNotEmpty($items);
+
+        foreach ($items as $item) {
+            $this->assertArrayHasKey('employee_code', $item);
+            $this->assertArrayHasKey('full_name', $item);
+            $this->assertArrayHasKey('id_type', $item);
+            $this->assertArrayHasKey('id_number', $item);
+            $this->assertArrayHasKey('phone_primary', $item);
+
+            $this->assertArrayNotHasKey('id', $item);
+            $this->assertArrayNotHasKey('email', $item);
+            $this->assertArrayNotHasKey('date_of_birth', $item);
+            $this->assertArrayNotHasKey('address_line_1', $item);
+            $this->assertArrayNotHasKey('employee_name', $item);
+            $this->assertArrayNotHasKey('nic', $item);
+            $this->assertArrayNotHasKey('phone_number', $item);
+        }
+    }
+
+    public function test_another_project_without_identity_document_permission_cannot_receive_id_number(): void
+    {
+        // Stockly does NOT have id_number or id_type in allowed_resource_fields
+        $stockly = Project::where('code', 'stockly')->first();
+        $stocklyKey = $this->apiKeyService->generateKey(
+            project: $stockly,
+            name: 'Stockly Isolation Test Key'
+        )['plain_text_key'];
+
+        $resp = $this->withHeaders(['X-API-KEY' => $stocklyKey])
+            ->getJson("/api/v1/integrations/resources/employees/{$this->employee1->employee_code}");
+
+        $resp->assertStatus(200);
+        $data = $resp->json('data');
+
+        $this->assertArrayNotHasKey('id_number', $data);
+        $this->assertArrayNotHasKey('id_type', $data);
+
+        // Centrix does NOT have id_number or id_type in allowed_resource_fields
+        $centrixResp = $this->withHeaders(['X-API-KEY' => $this->plainTextApiKey])
+            ->getJson("/api/v1/integrations/resources/employees/{$this->employee1->employee_code}");
+
+        $centrixResp->assertStatus(200);
+        $centrixData = $centrixResp->json('data');
+
+        $this->assertArrayNotHasKey('id_number', $centrixData);
+        $this->assertArrayNotHasKey('id_type', $centrixData);
+    }
 }
+
 
