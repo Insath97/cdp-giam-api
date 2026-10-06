@@ -6,15 +6,28 @@ use Spatie\Permission\Models\Role as SpatieRole;
 
 class Role extends SpatieRole
 {
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'name',
         'guard_name',
-        'application_id',
-        'is_protected',
+        'description',
+        'is_system_reserved',
     ];
 
-    public function application()
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        return $this->belongsTo(Application::class);
+        return [
+            'is_system_reserved' => 'boolean',
+        ];
     }
 }
+

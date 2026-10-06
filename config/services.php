@@ -18,10 +18,6 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
-    'resend' => [
-        'key' => env('RESEND_KEY'),
-    ],
-
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
@@ -35,10 +31,32 @@ return [
         ],
     ],
 
-    'google' => [
-        'client_id' => env('GOOGLE_CLIENT_ID'),
-        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    'centrix' => [
+        'frontend_url' => env('CENTRIX_FRONTEND_URL'),
+        'api_url' => env('CENTRIX_API_BASE_URL'),
+        'client_id' => env('CENTRIX_CLIENT_ID'),
+        'client_secret' => env('CENTRIX_CLIENT_SECRET'),
+    ],
+
+    'hrms' => [
+        'api_url' => env('HRMS_API_BASE_URL'),
+        'client_id' => env('HRMS_CLIENT_ID'),
+        'client_secret' => env('HRMS_CLIENT_SECRET'),
+    ],
+
+    'payroll' => [
+        'api_url' => env('PAYROLL_API_BASE_URL'),
+        'client_id' => env('PAYROLL_CLIENT_ID'),
+        'client_secret' => env('PAYROLL_CLIENT_SECRET'),
+    ],
+
+    'stockly' => [
+        'base_url' => env('STOCKLY_BASE_URL', ''),
+        'api_url' => env('STOCKLY_API_BASE_URL', ''),
+    ],
+
+    'project_api_keys' => [
+        'pepper' => env('GIAM_API_KEY_PEPPER', env('APP_KEY')),
     ],
 
 ];

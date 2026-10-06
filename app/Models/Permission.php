@@ -2,25 +2,29 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Permission\Models\Permission as SpatiePermission;
 
 class Permission extends SpatiePermission
 {
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'name',
         'guard_name',
-        'group_name',
-        'module_id',
-        'application_id',
+        'permission_group_id',
+        'description',
     ];
 
-    public function module()
+    /**
+     * Get the permission group that owns this permission.
+     */
+    public function permissionGroup(): BelongsTo
     {
-        return $this->belongsTo(Module::class);
-    }
-
-    public function application()
-    {
-        return $this->belongsTo(Application::class);
+        return $this->belongsTo(GiamPermissionGroup::class, 'permission_group_id');
     }
 }
+
