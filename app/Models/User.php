@@ -2,18 +2,20 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Traits\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements JWTSubject, MustVerifyEmail
+class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable, HasRoles, HasOptimisticLocking, SoftDeletes;
+
+    protected $guard_name = 'web';
 
     /**
      * The attributes that are mass assignable.
@@ -21,19 +23,23 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      * @var list<string>
      */
     protected $fillable = [
+        'employee_code',
         'name',
         'username',
         'email',
         'password',
         'user_type',
-        'employee_id',
         'is_active',
         'can_login',
+        'email_verified_at',
         'last_login_at',
         'last_login_ip',
-        'email_verified_at',
-        'email_verification_token',
-        'email_verification_token_expires_at',
+        'failed_login_attempts',
+        'lockout_until',
+        'password_changed_at',
+        'must_change_password',
+        'self_service_reset_count',
+        'version',
     ];
 
     /**
@@ -55,322 +61,88 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
-            'email_verification_token_expires_at' => 'datetime',
-            'password' => 'hashed',
             'last_login_at' => 'datetime',
+            'lockout_until' => 'datetime',
+            'password_changed_at' => 'datetime',
+            'must_change_password' => 'boolean',
+            'self_service_reset_count' => 'integer',
+            'password' => 'hashed',
             'is_active' => 'boolean',
             'can_login' => 'boolean',
+            'failed_login_attempts' => 'integer',
+            'version' => 'integer',
         ];
     }
 
-    public function getJWTIdentifier()
-    {
-        return $this->getKey();
-    }
-
-    public function getJWTCustomClaims()
-    {
-        return [
-            'id' => $this->id,
-            'name' => $this->name,
-            'username' => $this->username,
-            'email' => $this->email,
-        ];
-    }
-
-    /* Relationships */
-
-    public function employee()
-    {
-        return $this->belongsTo(Employee::class);
-    }
-
-    public function applications(): BelongsToMany
-    {
-        return $this->belongsToMany(Application::class, 'application_user');
-    }
-
-    /* Accessors */
-
-    public function getBranchAttribute()
-    {
-        return $this->employee?->branch;
-    }
-
-    public function getZoneAttribute()
-    {
-        return $this->employee?->zonal;
-    }
-
-    public function getRegionAttribute()
-    {
-        return $this->employee?->region;
-    }
-
-    public function getProvinceAttribute()
-    {
-        return $this->employee?->province;
-    }
-
-    public function getParentAttribute()
-    {
-        return $this->employee?->reportingManager?->user;
-    }
-
-    public function getChildrenAttribute()
-    {
-        if (!$this->employee_id) {
-            return collect();
-        }
-        $subordinateIds = Employee::where('reporting_manager_id', $this->employee_id)->pluck('id');
-        return User::whereIn('employee_id', $subordinateIds)->get();
-    }
-
-    public function toArray()
-    {
-        $array = parent::toArray();
-
-        // If employee relationship is loaded, we can populate branch, zone, region, province
-        if ($this->relationLoaded('employee') && $this->employee) {
-            $array['branch'] = $this->employee->relationLoaded('branch') ? $this->employee->branch : null;
-            $array['zone'] = $this->employee->relationLoaded('zonal') ? $this->employee->zonal : null;
-            $array['region'] = $this->employee->relationLoaded('region') ? $this->employee->region : null;
-            $array['province'] = $this->employee->relationLoaded('province') ? $this->employee->province : null;
-
-            if ($this->employee->relationLoaded('reportingManager') && $this->employee->reportingManager) {
-                if ($this->employee->reportingManager->relationLoaded('user') && $this->employee->reportingManager->user) {
-                    $parentUser = $this->employee->reportingManager->user;
-                    $array['parent'] = [
-                        'id' => $parentUser->id,
-                        'name' => $parentUser->name,
-                        'username' => $parentUser->username,
-                        'email' => $parentUser->email,
-                        'user_type' => $parentUser->user_type,
-                        'is_active' => $parentUser->is_active,
-                        'can_login' => $parentUser->can_login,
-                    ];
-                } else {
-                    $array['parent'] = null;
-                }
-            } else {
-                $array['parent'] = null;
-            }
-
-            if ($this->employee->relationLoaded('subordinates')) {
-                $array['children'] = $this->employee->subordinates
-                    ->map(function ($sub) {
-                        return $sub->relationLoaded('user') && $sub->user ? [
-                            'id' => $sub->user->id,
-                            'name' => $sub->user->name,
-                            'username' => $sub->user->username,
-                            'email' => $sub->user->email,
-                            'user_type' => $sub->user->user_type,
-                            'is_active' => $sub->user->is_active,
-                            'can_login' => $sub->user->can_login,
-                        ] : null;
-                    })
-                    ->filter()
-                    ->values()
-                    ->toArray();
-            } else {
-                $array['children'] = [];
-            }
-        } else {
-            $array['branch'] = null;
-            $array['zone'] = null;
-            $array['region'] = null;
-            $array['province'] = null;
-            $array['parent'] = null;
-            $array['children'] = [];
-        }
-
-        if ($this->relationLoaded('applications')) {
-            $array['applications'] = $this->applications->map(function ($app) {
-                $roles = $this->relationLoaded('roles')
-                    ? $this->roles->where('application_id', $app->id)->values()->map(function ($role) {
-                        return [
-                            'id' => $role->id,
-                            'name' => $role->name,
-                        ];
-                    })
-                    : [];
-
-                $permissions = $this->relationLoaded('permissions')
-                    ? $this->permissions->where('application_id', $app->id)->values()->map(function ($perm) {
-                        return [
-                            'id' => $perm->id,
-                            'name' => $perm->name,
-                        ];
-                    })
-                    : [];
-
-                return [
-                    'id' => $app->id,
-                    'name' => $app->name,
-                    'code' => $app->code,
-                    'description' => $app->description,
-                    'app_url' => $app->app_url,
-                    'is_active' => $app->is_active,
-                    'roles' => $roles,
-                    'permissions' => $permissions,
-                ];
-            })->toArray();
-        } else {
-            $array['applications'] = [];
-        }
-
-        return $array;
-    }
-
-    /* Helper Methods */
-
     /**
-     * Sync roles for a specific application.
+     * Check if the user is eligible for self-service password reset.
      */
-    public function syncRolesForApplication(array $roleIds, int $applicationId): void
+    public function canPerformSelfServicePasswordReset(): bool
     {
-        $appRoleIds = Role::where('application_id', $applicationId)->pluck('id')->toArray();
-        $currentUserAppRoles = array_intersect($this->roles->pluck('id')->toArray(), $appRoleIds);
-
-        if (!empty($currentUserAppRoles)) {
-            $this->roles()->detach($currentUserAppRoles);
-        }
-
-        if (!empty($roleIds)) {
-            $this->roles()->attach($roleIds);
-        }
-
-        $this->forgetCachedPermissions();
+        return $this->self_service_reset_count < 3;
     }
 
     /**
-     * Sync direct permissions for a specific application.
+     * Get the employee profile associated with the user.
      */
-    public function syncPermissionsForApplication(array $permissionIds, int $applicationId): void
+    public function employee(): BelongsTo
     {
-        $appPermissionIds = Permission::where('application_id', $applicationId)->pluck('id')->toArray();
-        $currentUserAppPermissions = array_intersect($this->permissions->pluck('id')->toArray(), $appPermissionIds);
-
-        if (!empty($currentUserAppPermissions)) {
-            $this->permissions()->detach($currentUserAppPermissions);
-        }
-
-        if (!empty($permissionIds)) {
-            $this->permissions()->attach($permissionIds);
-        }
-
-        $this->forgetCachedPermissions();
+        return $this->belongsTo(Employee::class, 'employee_code', 'employee_code');
     }
 
     /**
-     * Helper to clear Spatie's permission cache
+     * Get the project access entitlements assigned to the user.
      */
-    public function forgetCachedPermissions(): void
+    public function projectAccesses(): HasMany
     {
-        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
-    }
-
-    public function canLogin(): bool
-    {
-        $canLogin = $this->is_active && $this->can_login;
-
-        if ($this->employee_id && $this->relationLoaded('employee')) {
-            return $canLogin && $this->employee && $this->employee->is_active;
-        }
-
-        // If not loaded, check existence
-        if ($this->employee_id) {
-            return $canLogin && $this->load('employee')->employee->is_active;
-        }
-
-        return $canLogin;
-    }
-
-    public function updateLastLogin($ipAddress = null)
-    {
-        $this->update([
-            'last_login_at' => now(),
-            'last_login_ip' => $ipAddress
-        ]);
+        return $this->hasMany(UserProjectAccess::class, 'user_id');
     }
 
     /**
-     * Generate a unique email verification token
+     * Get the downstream provisioning sync jobs triggered for the user.
      */
-    public function generateEmailVerificationToken(): string
+    public function syncJobs(): HasMany
     {
-        $token = bin2hex(random_bytes(32));
-
-        $this->update([
-            'email_verification_token' => $token,
-            'email_verification_token_expires_at' => now()->addHours(24)
-        ]);
-
-        return $token;
+        return $this->hasMany(SyncJob::class, 'user_id');
     }
 
     /**
-     * Mark the user's email as verified
+     * Get the SSO authorization codes generated for the user.
      */
-    public function markEmailAsVerifiedcheck(string $token)
+    public function ssoAuthCodes(): HasMany
     {
-        $this->update([
-            'email_verified_at' => now(),
-            'email_verification_token' => $token,
-            'email_verification_token_expires_at' => null
-        ]);
+        return $this->hasMany(SsoAuthCode::class, 'user_id');
     }
 
     /**
-     * Mark the user's email as verified without a token
+     * Get the password reset assistance requests submitted for the user.
      */
-    public function markEmailAsVerified()
+    public function passwordResetRequests(): HasMany
     {
-        $this->update([
-            'email_verified_at' => now(),
-            'email_verification_token' => null,
-            'email_verification_token_expires_at' => null
-        ]);
+        return $this->hasMany(PasswordResetRequest::class, 'user_id');
     }
 
     /**
-     * Check if the user's email verification token is valid
+     * Get the password reset tokens issued for the user.
      */
-    public function isEmailVerificationTokenValid(string $token): bool
+    public function passwordResetTokens(): HasMany
     {
-        if ($this->email_verification_token !== $token) {
-            return false;
-        }
-
-        if (!$this->email_verification_token_expires_at) {
-            return false;
-        }
-
-        return now()->lessThan($this->email_verification_token_expires_at);
+        return $this->hasMany(PasswordResetToken::class, 'user_id');
     }
 
     /**
-     * Get all direct and indirect subordinate IDs (descendants).
+     * Get the audit logs where this user acted as the actor.
      */
-    public function getAllDescendantIds(): array
+    public function auditLogs(): HasMany
     {
-        if (!$this->employee_id) {
-            return [];
-        }
-
-        if ($this->relationLoaded('employee') && $this->employee) {
-            return $this->employee->getAllDescendantUserIds();
-        }
-
-        return $this->load('employee')->employee->getAllDescendantUserIds();
+        return $this->hasMany(AuditLog::class, 'actor_user_id');
     }
 
     /**
-     * Check if the user has verified their email
+     * Get the user creation drafts created by this user.
      */
-    public function hasVerifiedEmail(): bool
+    public function drafts(): HasMany
     {
-        return !is_null($this->email_verified_at);
+        return $this->hasMany(UserCreationDraft::class, 'creator_user_id');
     }
-
 }
